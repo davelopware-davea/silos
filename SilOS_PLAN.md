@@ -19,6 +19,12 @@ Every substantive proposal is annotated with one of these four values:
 
 **[LOCKED] Project name:** The project is called **SilOS**.
 
+### Governing design principles
+
+**[LOCKED] Conceptual economy:** SilOS should be built from the smallest practical set of distinct concepts. Before introducing a new primitive, abstraction, mechanism, state model, or interaction rule, the design must first try to express the requirement by reusing or composing concepts that already exist. Similar ideas should be unified where doing so preserves clarity and capability. This principle applies across the UI, application model, services, storage, events, hardware interfaces, tooling, and documentation.
+
+**[LOCKED] Size and hardware reach over speed:** Small code and memory footprints, low resource requirements, and the ability to run across a wide range of hardwareâ€”including very constrained devicesâ€”are more important than maximizing execution speed. Performance should remain adequate and predictable, but an optimization that materially increases implementation size, conceptual complexity, or minimum hardware requirements must justify that cost against a concrete need.
+
 ---
 
 ## 1. Implementation Sequence
@@ -459,6 +465,8 @@ This section provides a compact index of decisions that are currently final.
 |---|---|
 | Project identity | **[LOCKED]** The project is named **SilOS**. |
 | Planning | **[LOCKED]** SilOS will be designed through a living plan that distinguishes open decisions, options, recommendations, and locked decisions. |
+| Conceptual economy | **[LOCKED]** SilOS will favor reuse and composition, introducing new concepts only when existing ones cannot express the requirement clearly. |
+| Resource priority | **[LOCKED]** Small footprint and support for very constrained hardware take priority over maximizing execution speed, while behavior must remain adequate and predictable. |
 | Document order | **[LOCKED]** The implementation sequence and proposed initial constraints appear before the detailed design areas. |
 | Target range | **[LOCKED]** SilOS is intended to support Arduino-compatible boards, ESP32-class boards, Raspberry Pi Pico-class microcontrollers, Raspberry Pi Zero and full Raspberry Pi boards, and browsers. |
 | Implementation language | **[LOCKED]** SilOS will be implemented in C++ using a deliberately controlled subset whose precise rules will be defined later. |
