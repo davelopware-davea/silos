@@ -469,7 +469,7 @@ The sequence below is ordered to resolve high-impact design questions early, all
 
 **[DECISION] Governance:** Define who may lock or reopen decisions, how disagreements are resolved, and how changes are versioned.
 
-**[DECISION] Licensing:** Select licenses for source code, fonts, artwork, documentation, examples, and third-party components.
+**[LOCKED] Source code licensing:** SilOS source code is licensed under the MIT License. Licenses for fonts, artwork, documentation, examples, and third-party components remain to be selected.
 
 ---
 
@@ -505,3 +505,4 @@ This section provides a compact index of decisions that are currently final.
 | Native system language | **[LOCKED]** SilOS will include a minimal interpreted or bytecode-executed language, and as much portable system behavior as practical will be written in it. |
 | Primary use | **[LOCKED]** The first complete system will be a compact personal-tools environment with to-do, calendar, alarm, and chat applications that collectively exercise UI, storage, notifications, system-initiated activity, and networking. |
 | Application order | **[LOCKED]** Implement the reference applications in this order: to-do list, alarm, calendar, then chat. |
+| Source code license | **[LOCKED]** SilOS source code is licensed under the MIT License. |
