@@ -74,7 +74,7 @@ The sequence below is ordered to resolve high-impact design questions early, all
 
 **[RECOMMENDATION] Product center of gravity:** SilOS should be an embedded control and information environment that can also be developed, simulated, demonstrated, and used in a browser.
 
-**[DECISION] Primary use:** Decide whether the first release is primarily for real embedded control, fictional interfaces and installations, personal computing, education, or a deliberately supported combination.
+**[LOCKED] Primary use:** The first complete SilOS system will be a compact personal-tools environment intended to demonstrate the platform's potential. Its initial application set will include a to-do list and calendar to exercise persistent storage and general UI, an alarm to exercise system-initiated activity and notifications, and a chat application to exercise networking.
 
 **[OPTION] General-purpose hobby OS:** SilOS could eventually own the full machine and provide kernel facilities directly.
 
@@ -284,7 +284,7 @@ The sequence below is ordered to resolve high-impact design questions early, all
 
 **[OPTION] Function-key shell:** Organize operation around persistent key legends and context-sensitive commands.
 
-**[DECISION] First reference application:** Choose a concrete application that exercises live values, commands, persistence, alerts, and hardware simulation.
+**[LOCKED] First reference application set and order:** Use a small, integrated personal-tools suite rather than forcing one application to prove every subsystem. Implement it in this order: to-do list for persistence and foundational UI; alarm for timers, system-initiated activity, and notifications; calendar for date-based data and more complex structured UI; and chat for networking and asynchronous events. The minimum complete behavior of each application remains to be defined.
 
 **[DECISION] Notification model:** Define transient notices, acknowledged alarms, persistent faults, severity, history, and interruption rules.
 
@@ -446,8 +446,8 @@ The sequence below is ordered to resolve high-impact design questions early, all
 
 The next design discussion should resolve or narrow these questions in order:
 
-1. **[DECISION] Primary use case:** What must the first complete SilOS system actually do?
-2. **[DECISION] First reference application:** Which application will prove the system design rather than merely demonstrate its appearance?
+1. **[LOCKED] Primary use case:** Deliver a compact personal-tools environment comprising a to-do list, calendar, alarm, and chat application, collectively demonstrating UI, storage, system-initiated activity, notifications, and networking.
+2. **[DECISION] Application scope:** Define the minimum complete behavior of each application. The implementation order is locked as to-do list, alarm, calendar, then chat.
 3. **[DECISION] Reference hardware:** Which MCU board and which Raspberry Pi board, displays, and physical inputs will establish the real resource constraints?
 4. **[DECISION] Minimum display:** What is the smallest supported character or pixel geometry?
 5. **[DECISION] Interaction grammar:** Which inputs are universal, and how do focus, back, commands, alerts, and application switching behave?
@@ -470,3 +470,5 @@ This section provides a compact index of decisions that are currently final.
 | Document order | **[LOCKED]** The implementation sequence and proposed initial constraints appear before the detailed design areas. |
 | Target range | **[LOCKED]** SilOS is intended to support Arduino-compatible boards, ESP32-class boards, Raspberry Pi Pico-class microcontrollers, Raspberry Pi Zero and full Raspberry Pi boards, and browsers. |
 | Implementation language | **[LOCKED]** SilOS will be implemented in C++ using a deliberately controlled subset whose precise rules will be defined later. |
+| Primary use | **[LOCKED]** The first complete system will be a compact personal-tools environment with to-do, calendar, alarm, and chat applications that collectively exercise UI, storage, notifications, system-initiated activity, and networking. |
+| Application order | **[LOCKED]** Implement the reference applications in this order: to-do list, alarm, calendar, then chat. |
