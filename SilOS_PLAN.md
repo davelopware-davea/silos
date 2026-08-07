@@ -297,7 +297,37 @@ The sequence below is ordered to resolve high-impact design questions early, all
 
 **[OPTION] Function-key shell:** Organize operation around persistent key legends and context-sensitive commands.
 
-**[LOCKED] First reference application set and order:** Use a small, integrated personal-tools suite rather than forcing one application to prove every subsystem. Implement it in this order: to-do list for persistence and foundational UI; alarm for timers, system-initiated activity, and notifications; calendar for date-based data and more complex structured UI; and chat for networking and asynchronous events. The minimum complete behavior of each application remains to be defined.
+**[LOCKED] First reference application set and order:** Use a small, integrated personal-tools suite rather than forcing one application to prove every subsystem. Implement it in this order: to-do list for persistence and foundational UI; alarm for timers, system-initiated activity, and notifications; calendar for date-based data and more complex structured UI; and chat for networking and asynchronous events. The minimum complete behavior of each application is defined below.
+
+**[LOCKED] Current-user application context:** The personal-tools applications operate within the context of the current user. That user may be authenticated on systems that support login, or may be the implicit local user on a single-user implementation. This application-level ownership model does not yet decide whether SilOS as a whole is single-user or multi-user, nor when authentication is required.
+
+**[LOCKED] To-do data and persistence:** The to-do application provides the current user with a list of items. Every item has a description, an optional target date-time, and a status. The allowed statuses are `to do`, `in progress`, and `done`. The list is persistent and remains available after a system reboot.
+
+**[LOCKED] To-do operations:** The current user can create, edit, and delete to-do items. Changing an item's status is part of editing it rather than a separate application-level operation.
+
+**[LOCKED] Application-controlled to-do ordering:** The to-do application controls the order in which items are presented. Its initial policy may order by target date-time and then status, but the exact precedence, direction, and treatment of undated items are application details rather than platform-level requirements.
+
+**[DECISION] Remaining to-do behavior:** Define filtering, field limits, capacity behavior, and deletion semantics only where these materially constrain the platform design. Timezone, clock-change, input, and display semantics for the optional target date-time remain part of the shared system time model.
+
+**[LOCKED] Alarm data and operations:** The alarm application provides the current user with a list of alarms. Every alarm has a name, a date-time, a Boolean `one-time` flag, and a Boolean `disabled` flag. The user can create, edit, and delete alarms. Alarm records and state persist across system reboots.
+
+**[LOCKED] Alarm triggering:** When the current time reaches the date-time of an alarm that is not disabled, the alarm application triggers a notification showing the alarm name. After a one-time alarm triggers, the application sets its `disabled` flag to true.
+
+**[DECISION] Remaining alarm behavior:** Define missed-alarm and clock-change behavior only where these materially constrain the shared time, scheduling, persistence, or notification services. Notification acknowledgement, history, interruption, and presentation remain part of the shared notification model.
+
+**[LOCKED] Calendar data, operations, and persistence:** The calendar application provides the current user with a list of calendar entries. Every entry has a start date-time, end date-time, title, and description. The user can create, edit, and delete entries. Calendar entries persist across system reboots.
+
+**[DECISION] Remaining calendar behavior:** Define date-time validation, presentation, ordering, filtering, and field or capacity limits only where these materially constrain the platform design. Timezone, clock-change, input, and display semantics remain part of the shared system time model.
+
+**[LOCKED] Chat-user data and operations:** The chat application provides the current user with a list of chat-users. Every chat-user has a name and an address, represented initially as a string. The current user can create, edit, and delete chat-users.
+
+**[LOCKED] Chat message data and operations:** Each chat-user has a list of messages. Every message has a direction (`sent` or `recv`), text, a date-time, and a status (`pending` or `done`). The current user can create a new sent message and delete any message.
+
+**[LOCKED] Chat networking:** Creating a sent message queues an outbound network message addressed to the recipient chat-user's address. When SilOS receives a network message and identifies it as a chat message, the message is received by the chat application.
+
+**[LOCKED] Chat persistence and notification:** Chat-users and messages persist across system reboots. When a chat message is received, the chat application triggers a notification showing the sending chat-user and the message text.
+
+**[DECISION] Remaining chat behavior:** Define address interpretation, network-message identification, message transport, delivery-status transitions, inbound sender matching, failure behavior, ordering, field limits, and capacity behavior only where these materially constrain the networking, persistence, notification, or platform interfaces.
 
 **[DECISION] Notification model:** Define transient notices, acknowledged alarms, persistent faults, severity, history, and interruption rules.
 
@@ -353,7 +383,7 @@ The sequence below is ordered to resolve high-impact design questions early, all
 
 **[OPTION] Standard web protocols:** Provide optional HTTP and WebSocket services for browser integration and remote control.
 
-**[DECISION] First network use case:** Identify the first concrete requirement—remote display, telemetry, configuration, updates, discovery, or device-to-device messaging.
+**[LOCKED] First network use case:** The first concrete networking requirement is asynchronous chat messaging. Creating a sent chat message queues an outbound network message to the recipient address; inbound network messages identified as chat messages are delivered to the chat application. The transport and addressing schemes remain open design decisions.
 
 **[DECISION] Connectivity policy:** Define offline behavior, reconnection, timeouts, metered links, network status, and user control.
 
@@ -478,7 +508,7 @@ The sequence below is ordered to resolve high-impact design questions early, all
 The next design discussion should resolve or narrow these questions in order:
 
 1. **[LOCKED] Primary use case:** Deliver a compact personal-tools environment comprising a to-do list, calendar, alarm, and chat application, collectively demonstrating UI, storage, system-initiated activity, notifications, and networking.
-2. **[DECISION] Application scope:** Define the minimum complete behavior of each application. The implementation order is locked as to-do list, alarm, calendar, then chat.
+2. **[LOCKED] Application scope:** The minimum complete behavior of the to-do list, alarm, calendar, and chat applications is defined in the shell and core applications section. The implementation order is to-do list, alarm, calendar, then chat.
 3. **[DECISION] Reference hardware:** Which MCU board and which Raspberry Pi board, displays, and physical inputs will establish the real resource constraints?
 4. **[DECISION] Minimum display:** What is the smallest supported character or pixel geometry?
 5. **[DECISION] Interaction grammar:** Which inputs are universal, and how do focus, back, commands, alerts, and application switching behave?
