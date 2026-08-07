@@ -35,12 +35,13 @@ The sequence below is ordered to resolve high-impact design questions early, all
 2. **[RECOMMENDATION] Define the visual language and interaction rules.** Establish color roles, typography, box styles, spacing, focus, navigation, input methods, animation, alerts, and accessibility rules.
 3. **[RECOMMENDATION] Define the portable platform interface.** Specify the contracts for display, input, timing, storage, networking, GPIO, sensors, randomness, power state, and diagnostics.
 4. **[RECOMMENDATION] Build a browser-based simulator first.** Use it for fast iteration while making embedded constraints—such as screen size, available memory, input devices, CPU speed, and power interruption—visible and testable.
-5. **[RECOMMENDATION] Implement the UI model and renderer.** Build the standard primitives, layout rules, rendering command format, focus system, and event dispatch.
-6. **[RECOMMENDATION] Add application lifecycle and navigation.** Define how applications initialize, enter, receive events, update, render, leave, suspend, and recover.
-7. **[RECOMMENDATION] Add persistent storage.** Implement a transactional, versioned, bounded, and power-loss-safe key-value store.
-8. **[RECOMMENDATION] Port SilOS to one reference target in each hardware class.** Begin with a constrained Arduino-compatible MCU or Raspberry Pi Pico-class board, then validate the hosted platform layer on a Raspberry Pi Zero or full Raspberry Pi board. Use these ports to test abstraction boundaries, footprint, responsiveness, and input behavior.
-9. **[RECOMMENDATION] Add optional services as justified.** Networking, authentication, encryption, background tasks, sound, and dynamic application loading should be introduced only against concrete use cases.
-10. **[DECISION] Decide whether a bare-metal kernel adds sufficient value.** Reassess this after the portable environment is working on both browser and MCU targets.
+5. **[RECOMMENDATION] Implement the minimal native language runtime.** Build the bounded interpreter, fixed-capacity value model, compact program representation, native-function boundary, and resource accounting needed to host higher layers.
+6. **[RECOMMENDATION] Implement the UI model and renderer.** Build the standard primitives, layout rules, rendering command format, focus system, and event dispatch, exposing them first through the native language.
+7. **[RECOMMENDATION] Add application lifecycle and navigation.** Define how applications initialize, enter, receive events, update, render, leave, suspend, and recover.
+8. **[RECOMMENDATION] Add persistent storage.** Implement a transactional, versioned, bounded, and power-loss-safe key-value store.
+9. **[RECOMMENDATION] Port SilOS to one reference target in each hardware class.** Begin with a constrained Arduino-compatible MCU or Raspberry Pi Pico-class board, then validate the hosted platform layer on a Raspberry Pi Zero or full Raspberry Pi board. Use these ports to test abstraction boundaries, footprint, responsiveness, and input behavior.
+10. **[RECOMMENDATION] Add optional services as justified.** Networking, authentication, encryption, background tasks, sound, and dynamic application loading should be introduced only against concrete use cases.
+11. **[DECISION] Decide whether a bare-metal kernel adds sufficient value.** Reassess this after the portable environment is working on both browser and MCU targets.
 
 ---
 
@@ -246,6 +247,14 @@ The sequence below is ordered to resolve high-impact design questions early, all
 
 **[RECOMMENDATION] Static applications initially:** Link applications into firmware for the first embedded release.
 
+**[LOCKED] Native interpreted language:** SilOS will include its own deliberately minimal interpreted or bytecode-executed scripting language. The runtime, program representation, and standard environment must be designed for very small flash, RAM, and persistent-storage footprints.
+
+**[LOCKED] Language-first implementation:** As much of SilOS as is practical will be written in the native language, including applications, shell behavior, UI composition, configuration logic, and portable services. C++ should be restricted to the interpreter/runtime, platform adaptation, primitive operations, and code whose timing, memory, bootstrapping, or hardware constraints genuinely require native implementation.
+
+**[RECOMMENDATION] Bounded execution:** Each language invocation should have explicit limits for work, stack depth, live values, message production, and native calls. Exhausting a limit must yield a defined recoverable fault rather than corrupting the system or monopolizing the event loop.
+
+**[RECOMMENDATION] No mandatory garbage-collected heap:** The smallest runtime profile should use fixed-capacity stacks, arenas, pools, interned constants, or immutable program data so tracing garbage collection and unconstrained allocation are not required.
+
 **[OPTION] Dynamic applications:** Larger targets could eventually load application modules at runtime.
 
 **[DECISION] Allocation policy:** Define whether heap allocation is forbidden, allowed only during initialization, or permitted through bounded pools.
@@ -253,6 +262,8 @@ The sequence below is ordered to resolve high-impact design questions early, all
 **[DECISION] Scheduling semantics:** Specify priorities, fairness, blocking rules, timer resolution, watchdog integration, and maximum permitted handler duration.
 
 **[DECISION] Concurrency model:** Define how interrupt, service, application, and render contexts exchange data safely.
+
+**[DECISION] Language execution model:** Choose source interpretation, compact bytecode, threaded code, or another representation after measuring interpreter size, program density, RAM use, startup cost, and portability. Define whether source compilation occurs on-device, at build time, or both.
 
 ---
 
@@ -263,6 +274,8 @@ The sequence below is ordered to resolve high-impact design questions early, all
 **[RECOMMENDATION] Capability-based access:** Applications should request named capabilities for storage, networking, GPIO, sensors, system settings, and other privileged services.
 
 **[RECOMMENDATION] Standard application contract:** Applications should expose identity, version, required capabilities, resource limits, commands, routes or screens, and lifecycle callbacks.
+
+**[RECOMMENDATION] Native-language application contract:** The standard lifecycle, capability, event, storage, and UI APIs should be native-language interfaces. Statically packaged language programs should remain viable on the smallest targets; runtime loading and editing are optional capabilities rather than baseline requirements.
 
 **[DECISION] Application packaging:** Define the compiled representation, metadata format, identifiers, version compatibility, and registration mechanism.
 
@@ -368,9 +381,27 @@ The sequence below is ordered to resolve high-impact design questions early, all
 
 ## 17. Language, Build System, and Tooling
 
-**[LOCKED] Implementation language:** SilOS will be implemented in C++.
+**[LOCKED] Bootstrap implementation language:** The foundational runtime and platform substrate of SilOS will be implemented in C++.
 
 **[LOCKED] Controlled language profile:** SilOS will use a deliberately controlled subset of C++. The precise subset and enforcement rules will be defined later, with portability, deterministic resource use, small binaries, and suitability for constrained targets as its governing objectives.
+
+**[LOCKED] Native system language:** SilOS will have a small interpreted or bytecode-executed language of its own, and the majority of portable system behavior should be authored in it where resource and timing constraints permit.
+
+**[RECOMMENDATION] Language character:** Favor a tiny, regular, easily parsed language with a small number of value types and control forms, first-class access to SilOS events and capabilities, deterministic error behavior, and no feature that requires a large runtime. Prefer semantic economy and compact stored programs over familiar syntax.
+
+**[RECOMMENDATION] One language across roles:** Use the same core language for applications, shell commands, automation, configuration, and system services. Optional syntactic sugar or tooling must lower to the same compact core rather than introduce multiple runtimes.
+
+**[RECOMMENDATION] Static and interactive use:** Support ahead-of-time packaging into firmware as the baseline. A REPL, source parser, runtime program loading, and on-device editing should be separable capabilities so constrained builds can omit them while still executing packaged programs.
+
+**[RECOMMENDATION] Small native surface:** Expose a narrow, capability-checked set of C++ primitives. Native extensions must declare resource behavior and must not allow language code to bypass scheduling, storage, or capability rules.
+
+**[DECISION] Core language design:** Define syntax, value types, mutability, functions, modules, errors, iteration, event handlers, and the minimum standard library.
+
+**[DECISION] Program representation:** Decide whether deployed programs store source, bytecode, threaded code, AST-like data, or target-selected forms, and define validation and version compatibility.
+
+**[DECISION] Memory semantics:** Define stack and frame limits, object lifetimes, strings and collections, allocation strategy, interning, sharing, and behavior on exhaustion.
+
+**[DECISION] Trust boundary:** Decide whether all packaged programs are trusted or whether the interpreter validates programs and enforces capability and resource isolation strongly enough to run untrusted code on suitable targets.
 
 **[RECOMMENDATION] Freestanding portable core:** Keep the core compatible with freestanding C++ where practical and avoid dependence on operating-system services or a full hosted standard library.
 
@@ -454,6 +485,7 @@ The next design discussion should resolve or narrow these questions in order:
 6. **[DECISION] Rendering model:** Strict cells, grid-aligned pixels, or hybrid; retained, immediate, or hybrid UI state?
 7. **[DECISION] Resource budgets:** What flash, RAM, startup, latency, and power targets define “small”?
 8. **[DECISION] Controlled C++ profile:** Which C++ language version, features, runtime facilities, library components, and enforcement rules form the approved SilOS subset?
+9. **[DECISION] Native language core:** What is the smallest syntax, value model, execution representation, memory discipline, and native API that can express the shell, reference applications, UI composition, and portable services within the target budgets?
 
 ---
 
@@ -469,6 +501,7 @@ This section provides a compact index of decisions that are currently final.
 | Resource priority | **[LOCKED]** Small footprint and support for very constrained hardware take priority over maximizing execution speed, while behavior must remain adequate and predictable. |
 | Document order | **[LOCKED]** The implementation sequence and proposed initial constraints appear before the detailed design areas. |
 | Target range | **[LOCKED]** SilOS is intended to support Arduino-compatible boards, ESP32-class boards, Raspberry Pi Pico-class microcontrollers, Raspberry Pi Zero and full Raspberry Pi boards, and browsers. |
-| Implementation language | **[LOCKED]** SilOS will be implemented in C++ using a deliberately controlled subset whose precise rules will be defined later. |
+| Bootstrap implementation | **[LOCKED]** The interpreter/runtime, platform adapters, primitives, and constraint-critical substrate will be implemented in a deliberately controlled C++ subset. |
+| Native system language | **[LOCKED]** SilOS will include a minimal interpreted or bytecode-executed language, and as much portable system behavior as practical will be written in it. |
 | Primary use | **[LOCKED]** The first complete system will be a compact personal-tools environment with to-do, calendar, alarm, and chat applications that collectively exercise UI, storage, notifications, system-initiated activity, and networking. |
 | Application order | **[LOCKED]** Implement the reference applications in this order: to-do list, alarm, calendar, then chat. |
