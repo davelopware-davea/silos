@@ -12,15 +12,23 @@ to-do list, alarm, calendar, and chat application.
 
 ## Project status
 
-SilOS is currently in the **design and planning stage**; see `SilOS_PLAN.md` for
-the current decisions, open questions, and planned work.
+SilOS is currently in the **design and planning stage**; see
+[SilOS_PLAN.md](SilOS_PLAN.md) for the current decisions, open questions, and
+planned work.
 
 ## Files
 
-- `SilOS_PLAN.md` - the authoritative living design and implementation plan,
-  including locked decisions, recommendations, options, and open questions.
-- `AGENTS.md` - project-specific instructions for contributors and coding agents.
-- `LICENSE` - the MIT License covering the SilOS source code.
+- [SilOS_PLAN.md](SilOS_PLAN.md) - the authoritative living project plan,
+  including agreed principles, the current milestone, active questions, and
+  later areas of work.
+- [SilOS_DESIGN_BACKLOG.md](SilOS_DESIGN_BACKLOG.md) - archived design ideas,
+  alternatives, and earlier recommendations retained for future reference.
+- [Spike-FreeRTOS-uLisp-Variable-UI-Binding.md](Spike-FreeRTOS-uLisp-Variable-UI-Binding.md)
+  - an exploratory design spike covering FreeRTOS, uLisp, and live
+  variable-to-display binding.
+- [AGENTS.md](AGENTS.md) - project-specific instructions for contributors and
+  coding agents.
+- [LICENSE](LICENSE) - the MIT License covering the SilOS source code.
 
 ## License
 

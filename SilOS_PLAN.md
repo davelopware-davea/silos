@@ -8,6 +8,17 @@ This is the authoritative plan for SilOS. It deliberately records only:
 
 Ideas are not commitments. Detailed alternatives and earlier recommendations are preserved in `SilOS_DESIGN_BACKLOG.md` and should be reconsidered only when relevant work begins.
 
+## Contents
+
+1. [Purpose](#1-purpose)
+2. [Governing principles](#2-governing-principles)
+3. [Committed foundations](#3-committed-foundations)
+4. [Current milestone: prove the core idea](#4-current-milestone-prove-the-core-idea)
+5. [Questions to answer during this milestone](#5-questions-to-answer-during-this-milestone)
+6. [Later milestones](#6-later-milestones)
+7. [Topics deliberately deferred](#7-topics-deliberately-deferred)
+8. [Planning rule](#8-planning-rule)
+
 ## 1. Purpose
 
 SilOS is a tiny, opinionated operating environment for embedded control, information systems, and compact personal tools. It will share a common core and interaction model across constrained hardware, conventional computers, and the browser.
