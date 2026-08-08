@@ -2,7 +2,7 @@
 
 ## Planning
 
-- Use [`SilOS_PLAN.md`](SilOS_PLAN.md) as the authoritative project plan. Consult it for planning and update it when project decisions or plans change.
+- Use [`docs/design/SilOS_PLAN.md`](docs/design/SilOS_PLAN.md) as the authoritative project plan. Consult it for planning and update it when project decisions or plans change.
 
 ## Communication style
 

@@ -1,6 +1,6 @@
 # SilOS Design Backlog (Archived Plan)
 
-> This is the detailed plan archived on 8 August 2026. It preserves earlier recommendations, options, and open questions for reference, but it is not authoritative. Consult `SilOS_PLAN.md` for current commitments and current work. Revisit material here only when its design area becomes active.
+> This is the detailed plan archived on 8 August 2026. It preserves earlier recommendations, options, and open questions for reference, but it is not authoritative. Consult [SilOS_PLAN.md](SilOS_PLAN.md) for current commitments and current work. Revisit material here only when its design area becomes active.
 
 ## Introduction
 

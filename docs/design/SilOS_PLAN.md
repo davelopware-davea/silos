@@ -6,7 +6,7 @@ This is the authoritative plan for SilOS. It deliberately records only:
 - the current milestone and the questions blocking it; and
 - a short list of areas to explore later.
 
-Ideas are not commitments. Detailed alternatives and earlier recommendations are preserved in `SilOS_DESIGN_BACKLOG.md` and should be reconsidered only when relevant work begins.
+Ideas are not commitments. Detailed alternatives and earlier recommendations are preserved in [SilOS_DESIGN_BACKLOG.md](SilOS_DESIGN_BACKLOG.md) and should be reconsidered only when relevant work begins.
 
 ## Contents
 
@@ -188,7 +188,7 @@ The following areas matter, but do not need detailed recommendations yet:
 - bare-metal ownership of SBC or x86 hardware; and
 - sound, GPIO, sensors, remote rendering, and other optional capabilities.
 
-When one of these becomes necessary, begin with the concrete use case and constraints, consult `SilOS_DESIGN_BACKLOG.md` for earlier thinking, and then decide afresh.
+When one of these becomes necessary, begin with the concrete use case and constraints, consult [SilOS_DESIGN_BACKLOG.md](SilOS_DESIGN_BACKLOG.md) for earlier thinking, and then decide afresh.
 
 ## 8. Planning rule
 
