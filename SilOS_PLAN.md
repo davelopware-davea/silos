@@ -39,16 +39,16 @@ The sequence below is ordered to resolve high-impact design questions early, all
 6. **[RECOMMENDATION] Implement the UI model and renderer.** Build the standard primitives, layout rules, rendering command format, focus system, and event dispatch, exposing them first through the native language.
 7. **[RECOMMENDATION] Add application lifecycle and navigation.** Define how applications initialize, enter, receive events, update, render, leave, suspend, and recover.
 8. **[RECOMMENDATION] Add persistent storage.** Implement a transactional, versioned, bounded, and power-loss-safe key-value store.
-9. **[RECOMMENDATION] Port SilOS to one reference target in each hardware class.** Begin with a constrained Arduino-compatible MCU or Raspberry Pi Pico-class board, then validate the hosted platform layer on a Raspberry Pi Zero or full Raspberry Pi board. Use these ports to test abstraction boundaries, footprint, responsiveness, and input behavior.
+9. **[RECOMMENDATION] Port SilOS to the four target profiles.** Validate the portable core on the MCU, SBC, x86, and Browser targets defined in the hardware and platform model. Use these ports to test abstraction boundaries, footprint, responsiveness, and input behavior.
 10. **[RECOMMENDATION] Add optional services as justified.** Networking, authentication, encryption, background tasks, sound, and dynamic application loading should be introduced only against concrete use cases.
-11. **[DECISION] Decide whether a bare-metal kernel adds sufficient value.** Reassess this after the portable environment is working on both browser and MCU targets.
+11. **[DECISION] Decide whether a bare-metal kernel adds sufficient value.** Reassess this after the portable environment is working on both Browser and MCU targets.
 
 ---
 
 ## 2. Proposed Initial Constraints
 
 - **[RECOMMENDATION]** The portable core must not depend on a host operating system.
-- **[RECOMMENDATION]** Browser and embedded targets must share application and domain-logic code.
+- **[RECOMMENDATION]** MCU, SBC, x86, and Browser targets must share application and domain-logic code.
 - **[RECOMMENDATION]** The core should be capable of running without heap allocation after initialization.
 - **[RECOMMENDATION]** The UI must remain usable in monochrome; color is a semantic enhancement rather than the only carrier of meaning.
 - **[RECOMMENDATION]** Every essential function must be accessible using a keyboard or directional controls.
@@ -60,10 +60,9 @@ The sequence below is ordered to resolve high-impact design questions early, all
 - **[RECOMMENDATION]** Visual effects must never delay input or make system state ambiguous.
 - **[RECOMMENDATION]** Resource exhaustion must result in an explicit, bounded, and recoverable state.
 - **[DECISION]** Set measurable footprint targets for flash, RAM, startup time, idle power, input latency, and minimum display dimensions.
-- **[LOCKED]** The intended target range includes Arduino-compatible boards, ESP32-class boards, Raspberry Pi Pico-class microcontrollers, Raspberry Pi Zero and full Raspberry Pi computers, and web browsers.
+- **[LOCKED]** The four initial target profiles are MCU, SBC, x86, and Browser, as defined in the hardware and platform model.
 - **[RECOMMENDATION]** Use capability profiles so very small boards can run a deliberately reduced SilOS configuration while larger targets provide additional applications and services without changing the core interaction model.
-- **[DECISION]** Select one initial reference device, display, and input configuration from each target class.
-- **[DECISION]** Define the minimum browser support policy and whether the browser target requires WebAssembly.
+- **[DECISION]** Complete the unresolved details listed with the four target profiles, including storage configurations, the x86 host operating system, the Chrome support window, and whether WebAssembly is required.
 
 ---
 
@@ -71,7 +70,7 @@ The sequence below is ordered to resolve high-impact design questions early, all
 
 **[RECOMMENDATION] Proposed charter:**
 
-> SilOS is a tiny, text-first operating environment for embedded control and information systems, sharing a common core, applications where capabilities permit, and the same interaction model across Arduino-compatible boards, ESP32 and Raspberry Pi Pico-class microcontrollers, Raspberry Pi computers, web browsers, and larger computers.
+> SilOS is a tiny, text-first operating environment for embedded control and information systems, sharing a common core, applications where capabilities permit, and the same interaction model across its MCU, SBC, x86, and Browser targets.
 
 **[RECOMMENDATION] Product center of gravity:** SilOS should be an embedded control and information environment that can also be developed, simulated, demonstrated, and used in a browser.
 
@@ -91,7 +90,7 @@ The sequence below is ordered to resolve high-impact design questions early, all
 
 ## 4. Definition of “Operating System”
 
-**[RECOMMENDATION] Initial system form:** Build SilOS first as a portable runtime with an OS-like shell. On Arduino-compatible, ESP32, and Raspberry Pi Pico-class MCU hardware it may use a thin board-support layer, Arduino core, vendor SDK, or RTOS. On Raspberry Pi Zero and full Raspberry Pi boards it should initially run as a lightweight hosted process on Linux. In the browser the same portable core should run through WebAssembly or an equivalent compiled target.
+**[RECOMMENDATION] Initial system form:** Build SilOS first as a portable runtime with an OS-like shell. The MCU target may use a thin board-support layer, vendor SDK, or RTOS. The SBC and x86 targets should initially run as lightweight hosted processes. The Browser target should run the same portable core through WebAssembly or an equivalent compiled form.
 
 **[RECOMMENDATION] Shared-core architecture:** Keep core behavior, applications, data models, and visual semantics portable. Isolate hardware and browser dependencies behind small platform interfaces.
 
@@ -121,9 +120,9 @@ The sequence below is ordered to resolve high-impact design questions early, all
 │ portable core                                             │
 │ events · tasks · storage · security                       │
 ├──────────────────┬───────────────────┬────────────────────┤
-│ MCU adapters     │ Linux SBC adapter │ browser adapter    │
-│ Arduino/ESP/Pico │ Pi Zero/full Pi   │ Canvas/DOM · input │
-│ flash · HAL/RTOS │ files · OS I/O    │ IndexedDB · WASM   │
+│ target adapters: MCU · SBC · x86 · Browser                │
+│ display · input · storage · network · platform services   │
+│ capability discovery · normalized events                  │
 └──────────────────┴───────────────────┴────────────────────┘
 ```
 
@@ -187,7 +186,7 @@ The sequence below is ordered to resolve high-impact design questions early, all
 
 **[RECOMMENDATION] Declarative screens:** Applications should normally describe their UI through a tree or command list rather than draw pixels directly.
 
-**[RECOMMENDATION] Platform renderers:** The same UI description should be renderable to an MCU framebuffer, serial terminal, browser Canvas, browser DOM accessibility representation, and desktop test harness where supported.
+**[RECOMMENDATION] Platform renderers:** The same UI description should be renderable through the MCU, SBC, x86, and Browser platform adapters where their declared capabilities permit.
 
 **[OPTION] Immediate-mode UI:** Rebuild the interface from application state every frame or update cycle.
 
@@ -205,27 +204,28 @@ The sequence below is ordered to resolve high-impact design questions early, all
 
 ## 9. Hardware and Platform Model
 
-**[LOCKED] Target families:** SilOS is intended to span Arduino-compatible hardware, ESP32-class microcontrollers, Raspberry Pi Pico-class microcontrollers, Raspberry Pi Zero and full Raspberry Pi single-board computers, and web browsers.
+**[LOCKED] Target profiles:** SilOS has four initial target profiles. This table is the authoritative definition of their reference hardware, display, and controls; other sections refer to the profiles by name.
 
-**[RECOMMENDATION] Three deployment classes:** Treat the target range as three architectural classes rather than pretending every board has identical resources:
+| Target | Hardware/runtime | Display | Baseline controls |
+|---|---|---|---|
+| **MCU** | ESP32; exact board variant and storage configuration remain to be selected | 1.3-inch SH1106 128x64 monochrome OLED over I2C | GPIO- or I2S-connected buttons, optionally including a joystick |
+| **SBC** | Raspberry Pi 3 Model B; initially a lightweight hosted process, with host OS and storage configuration still to be specified | ELEGOO 3.5-inch 480x320 HDMI TFT touch display | USB keyboard; touch hardware is present but is not yet a required baseline control |
+| **x86** | x86-compatible PC; host OS and storage configuration remain to be specified | 1024x768 monitor over HDMI | USB keyboard |
+| **Browser** | Recent Chrome; the support window and whether WebAssembly is mandatory remain to be specified | Browser Canvas with an optional synchronized semantic DOM; viewport size follows the browser environment | Keyboard |
 
-1. **Constrained MCU:** Arduino-compatible, ESP32-class, and Raspberry Pi Pico-class boards using static firmware, bounded memory, direct peripherals, and optional RTOS support.
-2. **Hosted SBC:** Raspberry Pi Zero and full Raspberry Pi boards initially running SilOS as a small Linux process with framebuffer, terminal, SDL-like, or direct display/input adapters.
-3. **Browser:** A WebAssembly or equivalent portable-core build with Canvas/DOM rendering, browser input, and browser-backed persistence.
+The Browser display is provided by browser APIs rather than WebAssembly itself. All four targets use the portable core and differ through platform adapters and declared capabilities.
 
 **[RECOMMENDATION] Capability tiers:** Define a minimal base profile shared by all viable targets, then optional profiles for color, networking, sound, touch, filesystem access, multitasking, and larger applications. Application manifests should declare their required profile and individual capabilities.
 
-**[DECISION] Minimum viable MCU:** Decide whether very small 8-bit Arduino boards are first-class execution targets, build targets with a reduced feature set, or outside the supported minimum. “Arduino-compatible” spans hardware with radically different memory and processor capabilities.
+**[DECISION] Minimum viable MCU:** Decide whether hardware smaller than the MCU profile is a first-class execution target, a reduced-profile build target, or outside the supported minimum.
 
-**[DECISION] Raspberry Pi operating mode:** Decide whether Pi Zero and full Pi boards remain hosted Linux targets, later gain a kiosk image that boots directly into SilOS, or eventually receive a bare-metal port.
+**[DECISION] SBC operating mode:** Decide whether the SBC remains a hosted target, later gains a kiosk image that boots directly into SilOS, or eventually receives a bare-metal port.
 
 **[RECOMMENDATION] Common platform abstraction:** Provide narrow interfaces for displays, input, timers, persistent storage, networking, sound, GPIO, sensors, randomness, power management, and diagnostics.
 
 **[RECOMMENDATION] Input normalization:** The portable core should receive semantic events without needing to know whether they originated from a keyboard, GPIO button, encoder, touch surface, or browser.
 
 **[RECOMMENDATION] Optional capabilities:** Targets should declare available capabilities; absence of networking, sound, touch, or sensors must not prevent the core from running.
-
-**[DECISION] Reference hardware:** Select one initial MCU board and one initial Raspberry Pi board, along with display technology, resolution, color depth, storage configuration, and physical controls. Additional representatives should be added only after the portable core works on the first two physical targets and in a browser.
 
 **[DECISION] Display contract:** Define framebuffer ownership, pixel formats, partial updates, double buffering, orientation, refresh limits, and text acceleration.
 
@@ -339,7 +339,7 @@ The sequence below is ordered to resolve high-impact design questions early, all
 
 **[RECOMMENDATION] Storage properties:** Updates should be transactional, versioned, wear-aware, recoverable after interruption, and subject to strict size limits.
 
-**[RECOMMENDATION] Platform mappings:** Map the store to MCU flash on embedded targets, a file or database-backed implementation on Raspberry Pi/Linux targets, and IndexedDB or another durable browser mechanism in the browser.
+**[RECOMMENDATION] Platform mappings:** Map the store through target adapters: MCU persistent storage, SBC and x86 hosted storage, and Browser durable storage.
 
 **[OPTION] Filesystem facade:** Add a small path-based filesystem API above the key-value layer if application use cases require it.
 
@@ -405,7 +405,7 @@ The sequence below is ordered to resolve high-impact design questions early, all
 
 **[DECISION] Logging:** Define event structure, severity, timestamps, persistence, redaction, retention, and export.
 
-**[DECISION] Update recovery:** Define dual-image, rollback, rescue firmware, or other strategies appropriate to the reference hardware.
+**[DECISION] Update recovery:** Define dual-image, rollback, rescue firmware, or other strategies appropriate to each target profile.
 
 ---
 
@@ -443,7 +443,7 @@ The sequence below is ordered to resolve high-impact design questions early, all
 
 **[DECISION] Enforcement:** Choose compiler flags, warnings, static analysis, formatting, linting, binary-size reports, map-file checks, sanitizers, and CI gates that enforce the controlled subset.
 
-**[RECOMMENDATION] Cross-target proof:** Compile the same minimal core, event loop, and screen for representative Arduino-compatible, ESP32 or Pico-class MCU, Raspberry Pi/Linux, and WebAssembly targets before expanding the system. Use the exercise to validate the C++ subset, platform ABI, binary size, RAM, startup behavior, and toolchain assumptions.
+**[RECOMMENDATION] Cross-target proof:** Compile the same minimal core, event loop, and screen for the MCU, SBC, x86, and Browser targets before expanding the system. Use the exercise to validate the C++ subset, platform ABI, binary size, RAM, startup behavior, and toolchain assumptions.
 
 **[DECISION] Build system:** Choose the build, dependency, target configuration, asset-generation, and reproducibility strategy.
 
@@ -509,8 +509,8 @@ The next design discussion should resolve or narrow these questions in order:
 
 1. **[LOCKED] Primary use case:** Deliver a compact personal-tools environment comprising a to-do list, calendar, alarm, and chat application, collectively demonstrating UI, storage, system-initiated activity, notifications, and networking.
 2. **[LOCKED] Application scope:** The minimum complete behavior of the to-do list, alarm, calendar, and chat applications is defined in the shell and core applications section. The implementation order is to-do list, alarm, calendar, then chat.
-3. **[DECISION] Reference hardware:** Which MCU board and which Raspberry Pi board, displays, and physical inputs will establish the real resource constraints?
-4. **[DECISION] Minimum display:** What is the smallest supported character or pixel geometry?
+3. **[LOCKED] Target profiles:** Begin with the MCU, SBC, x86, and Browser profiles defined in the hardware and platform model. Unresolved details are recorded in the authoritative profile table.
+4. **[DECISION] Minimum display:** What is the smallest supported character or pixel geometry? The MCU display is the smallest selected reference surface and therefore the starting constraint.
 5. **[DECISION] Interaction grammar:** Which inputs are universal, and how do focus, back, commands, alerts, and application switching behave?
 6. **[DECISION] Rendering model:** Strict cells, grid-aligned pixels, or hybrid; retained, immediate, or hybrid UI state?
 7. **[DECISION] Resource budgets:** What flash, RAM, startup, latency, and power targets define “small”?
@@ -530,7 +530,7 @@ This section provides a compact index of decisions that are currently final.
 | Conceptual economy | **[LOCKED]** SilOS will favor reuse and composition, introducing new concepts only when existing ones cannot express the requirement clearly. |
 | Resource priority | **[LOCKED]** Small footprint and support for very constrained hardware take priority over maximizing execution speed, while behavior must remain adequate and predictable. |
 | Document order | **[LOCKED]** The implementation sequence and proposed initial constraints appear before the detailed design areas. |
-| Target range | **[LOCKED]** SilOS is intended to support Arduino-compatible boards, ESP32-class boards, Raspberry Pi Pico-class microcontrollers, Raspberry Pi Zero and full Raspberry Pi boards, and browsers. |
+| Target profiles | **[LOCKED]** The initial targets are MCU, SBC, x86, and Browser, whose authoritative hardware, display, and control definitions are in the hardware and platform model. |
 | Bootstrap implementation | **[LOCKED]** The interpreter/runtime, platform adapters, primitives, and constraint-critical substrate will be implemented in a deliberately controlled C++ subset. |
 | Native system language | **[LOCKED]** SilOS will include a minimal interpreted or bytecode-executed language, and as much portable system behavior as practical will be written in it. |
 | Primary use | **[LOCKED]** The first complete system will be a compact personal-tools environment with to-do, calendar, alarm, and chat applications that collectively exercise UI, storage, notifications, system-initiated activity, and networking. |
