@@ -86,7 +86,7 @@ recorded rather than relying on a moving `latest` alias.
 - [x] Open a new PowerShell terminal and verify with `emcc --version` and
   `Get-Command emcc, emcmake`; in Git Bash use `which emcc` and `which emcmake`.
   Restart VS Code and Git Bash before testing them there.
-- [ ] Compile and run a minimal WebAssembly program to verify the complete
+- [x] Compile and run a minimal WebAssembly program to verify the complete
   toolchain before adding uLisp.
 
 ### Notes
@@ -169,3 +169,105 @@ After all `Code.exe` processes were stopped and VS Code was launched from a
 working standalone terminal, Emscripten was confirmed available in both
 PowerShell and Git Bash integrated terminals. The pinned host tool installation
 and activation are complete; the minimal WebAssembly compilation test remains.
+
+## 2026-08-10 - Minimal WebAssembly compilation smoke test
+
+### Question
+
+Can the installed CMake, Ninja, and pinned Emscripten toolchain compile and link
+a minimal C program to WebAssembly, and can the generated module execute?
+
+### Method
+
+- Added a small checked-in CMake fixture under `smoke-test/` that prints a
+  single success message.
+- Configured it through `emcmake` with CMake 4.4.2 and Ninja 1.13.2.
+- Built it with Emscripten 6.0.6, producing the normal JavaScript loader and a
+  WebAssembly module.
+- Executed the loader with Node.js 24.14.0 and inspected the module header.
+
+### Observed result
+
+- Configuration, C compilation, and WebAssembly linking all completed without
+  compiler or linker errors.
+- The build produced `freewisp-wasm-smoke.js` (56,190 bytes) and
+  `freewisp-wasm-smoke.wasm` (5,512 bytes).
+- Node printed `FreeWisp WebAssembly smoke test passed.` and exited with status
+  zero.
+- The module began with `00 61 73 6D 01 00 00 00`, the WebAssembly magic bytes
+  and version 1 header.
+- Codex's restricted execution sandbox initially denied access to SDK binaries
+  and generated OneDrive files. Re-running those checks with the required local
+  execution permission succeeded; this was not a toolchain failure.
+
+### Result
+
+The complete minimal WebAssembly build-and-run path is verified. The next spike
+step is to select and pin the uLisp source version, inspect its `testescape()`
+safe-point coverage, and begin the standalone uLisp WebAssembly REPL.
+
+## 2026-08-10 - Pinned uLisp and standalone WebAssembly evaluator
+
+### Question
+
+Can the current uLisp ESP source be pinned without local edits, adapted through
+a narrow platform layer, compiled to WebAssembly, and called repeatedly while
+retaining Lisp state?
+
+### Method
+
+- Selected uLisp ESP 4.9a at upstream commit
+  `aa9b24ca3323159dacadca60ea0e9ffdf00b1a81` (2 March 2026); upstream does not
+  attach a tag to this commit.
+- Vendored the unmodified `ulisp-esp.ino`, README, and MIT licence under
+  `third-party/ulisp-esp/`, with explicit revision metadata.
+- Counted and inspected `testescape()` calls in the pinned source.
+- Added a minimal Arduino compatibility layer outside the upstream snapshot.
+  Hardware, filesystem, Wi-Fi, and sleep operations are inert at this stage.
+- Reproduced Arduino's generated forward declarations during CMake configure so
+  the `.ino` compiles as ordinary C++ without modifying it.
+- Exported `freewisp_eval()` for JavaScript and added a small persistent browser
+  REPL page, plus Node-based CTest coverage.
+
+### Observed result
+
+- The pinned source has 12 `testescape()` call sites. They include the main
+  evaluator dispatch and iterative printing, lookup, wait, delay, and traversal
+  paths. This is promising safe-point coverage but does not establish a strict
+  upper bound for every primitive or garbage collection.
+- Emscripten 6.0.6 compiled and linked the upstream reader, evaluator, allocator,
+  garbage collector, and printer successfully. The only compiler diagnostic was
+  an upstream integer-to-float conversion warning in the random-number path.
+- The build produced `freewisp-ulisp.js` (70,026 bytes) and
+  `freewisp-ulisp.wasm` (183,772 bytes).
+- Arithmetic and list CTests both passed in 0.59 seconds total. Direct checks
+  returned `42` for arithmetic and `(1 4 9 16)` for a lambda/mapcar expression.
+- Two evaluations in one module instance—`(defvar answer 40)` followed by
+  `(+ answer 2)`—returned `answer` and then `42`, proving that state persists
+  across the same exported call path used by the browser page.
+- A temporary HTTP server returned the REPL page and WebAssembly module with
+  status 200, and served the module as `application/wasm` with the expected
+  183,772-byte length.
+- Automated in-app-browser startup was blocked by a Windows sandbox permission
+  error while accessing Codex's `AppData`, before the page could load. This is a
+  remaining visual/browser interaction check rather than a Wasm build failure.
+
+### Result
+
+The current uLisp source is pinned and the standalone WebAssembly evaluator is
+working with persistent state. Confirm the included REPL interactively in a
+recent Chrome instance, then pin FreeRTOS and start the cooperative kernel
+task/delay/queue/timer proof.
+
+## 2026-08-10 - Manual Chrome REPL confirmation
+
+### Observed result
+
+The user served `standalone-ulisp/build/`, opened the REPL in Chrome, and
+confirmed that the arithmetic, list/lambda, and persistent-state checks all
+worked as expected.
+
+### Result
+
+Sequence step 2, the standalone uLisp WebAssembly REPL, is complete. Next, pin
+FreeRTOS and begin the cooperative task, delay, queue, and software-timer proof.

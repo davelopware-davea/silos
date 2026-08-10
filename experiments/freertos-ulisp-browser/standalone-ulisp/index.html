@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FreeWisp standalone uLisp</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-monospace, Consolas, monospace; }
+    body { max-width: 56rem; margin: 2rem auto; padding: 0 1rem; background: #111; color: #eee; }
+    h1 { font: 1.3rem system-ui, sans-serif; }
+    #transcript { min-height: 18rem; padding: 1rem; overflow-wrap: anywhere; white-space: pre-wrap; background: #080808; border: 1px solid #444; }
+    form { display: flex; gap: .5rem; margin-top: .75rem; }
+    input { flex: 1; padding: .6rem; font: inherit; }
+    button { padding: .6rem 1rem; }
+  </style>
+</head>
+<body>
+  <h1>FreeWisp — standalone uLisp 4.9a WebAssembly REPL</h1>
+  <div id="transcript" aria-live="polite">Loading WebAssembly…</div>
+  <form id="repl">
+    <input id="expression" value="(+ 20 22)" aria-label="uLisp expression" autocomplete="off" disabled>
+    <button disabled>Run</button>
+  </form>
+  <script>
+    const transcript = document.querySelector('#transcript');
+    const form = document.querySelector('#repl');
+    const input = document.querySelector('#expression');
+    const button = form.querySelector('button');
+    var Module = {
+      onRuntimeInitialized() {
+        transcript.textContent = 'uLisp 4.9a ready.\n';
+        input.disabled = false;
+        button.disabled = false;
+        input.focus();
+      }
+    };
+
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      const expression = input.value;
+      const result = Module.ccall('freewisp_eval', 'string', ['string'], [expression]);
+      transcript.textContent += `> ${expression}\n${result}`;
+      input.select();
+    });
+  </script>
+  <script src="freewisp-ulisp.js"></script>
+</body>
+</html>
