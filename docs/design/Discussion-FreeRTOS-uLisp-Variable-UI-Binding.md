@@ -1,4 +1,4 @@
-# Spike: FreeRTOS, uLisp, and Variable-to-UI Binding
+# Discussion: FreeRTOS, uLisp, and Variable-to-UI Binding
 
 Conversation recorded on 8 August 2026.
 

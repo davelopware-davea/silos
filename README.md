@@ -23,9 +23,8 @@ planned work.
   later areas of work.
 - [SilOS_DESIGN_BACKLOG.md](docs/design/SilOS_DESIGN_BACKLOG.md) - archived design ideas,
   alternatives, and earlier recommendations retained for future reference.
-- [Spike-FreeRTOS-uLisp-Variable-UI-Binding.md](docs/design/Spike-FreeRTOS-uLisp-Variable-UI-Binding.md)
-  - an exploratory design spike covering FreeRTOS, uLisp, and live
-  variable-to-display binding.
+- [FreeWisp spike plan](experiments/freertos-ulisp-browser/plan.md) - the active
+  FreeRTOS + uLisp browser WebAssembly experiment.
 - [AGENTS.md](AGENTS.md) - project-specific instructions for contributors and
   coding agents.
 - [LICENSE](LICENSE) - the MIT License covering the SilOS source code.
@@ -33,3 +32,9 @@ planned work.
 ## License
 
 SilOS source code is available under the [MIT License](LICENSE).
+
+## Discussion records
+
+- [FreeRTOS, uLisp, and variable-to-UI binding](docs/design/Discussion-FreeRTOS-uLisp-Variable-UI-Binding.md)
+  - an exploratory discussion about live binding between Lisp values and the
+  UI; this is background material rather than the active FreeWisp spike.

@@ -2,6 +2,8 @@
 
 **Short name:** FreeWisp
 
+**Experimental journal:** [spike.md](spike.md)
+
 ## Goal
 
 Run the real FreeRTOS kernel with uLisp in a browser, learning what can be shared with the ESP32 target.

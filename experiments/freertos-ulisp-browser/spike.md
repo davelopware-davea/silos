@@ -2,6 +2,8 @@
 
 **Short name:** FreeWisp
 
+**Experiment plan:** [plan.md](plan.md)
+
 Short chronological notes recording what we tried, why, and what happened. Keep conclusions provisional until supported by the experiment.
 
 ## 2026-08-10 - Initial direction
