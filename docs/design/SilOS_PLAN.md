@@ -144,6 +144,8 @@ The prototype is complete when it:
 
 The first prototype may omit polish, general-purpose APIs, dynamic application loading, networking, authentication, sound, multitasking, and the later reference applications.
 
+The active [FreeWisp spike](../../experiments/freertos-ulisp-browser/plan.md) will test FreeRTOS and uLisp in a cooperative WebAssembly runtime as one possible Browser substrate. Its results are evidence, not yet an architectural commitment.
+
 ## 5. Questions to answer during this milestone
 
 These are the only active design questions. Prefer small experiments over speculative design.
