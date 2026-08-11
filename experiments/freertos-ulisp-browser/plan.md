@@ -35,6 +35,7 @@ Run the real FreeRTOS kernel with uLisp in a browser, learning what can be share
    - **[done]** Proved cooperative scheduling, delays, queue transfer, and a software timer with deterministic manual ticks.
    - **[done]** Replaced manual ticks with a Browser-specific 100 Hz event-loop-driven monotonic clock and verified delayed tasks and software timers against elapsed time.
 4. Run uLisp as a yielding FreeRTOS task.
+   - **[done]** Ran the pinned uLisp evaluator in a FreeRTOS task, exchanged expressions and results with another task through queues, and yielded from generated `testescape()` safe points on a 5 ms wall-clock budget.
 5. Connect the browser UI through worker messages.
 6. Measure Wasm size, memory, startup time, scheduling behaviour, and pauses.
 

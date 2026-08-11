@@ -382,3 +382,53 @@ port implementation while retaining independent `FreeRTOSConfig.h` files.
 Made the task-table capacity and per-task Asyncify stack size target-configurable.
 The kernel proof rebuilt successfully and passed three consecutive regression
 runs after the move.
+
+## 2026-08-11 - uLisp in a yielding FreeRTOS task
+
+### Question
+
+Can the pinned uLisp evaluator run inside a genuine FreeRTOS task, retain Lisp
+state across queued requests, and yield often enough for another task to run
+during a long evaluation?
+
+### Method
+
+- Added a combined FreeRTOS/uLisp target using the shared cooperative port.
+- Kept the vendored uLisp source unchanged. During CMake generation, inserted
+  one call to `freewisp_ulisp_safe_point()` at the start of the upstream
+  `testescape()` function.
+- Applied a 5 ms monotonic wall-clock budget at that hook. An expired budget
+  calls `taskYIELD()` and begins a new budget after the task resumes.
+- Kept uLisp garbage collection stop-the-world and non-yielding.
+- Sent fixed-size expression requests and printed results through separate
+  one-element FreeRTOS queues.
+- Evaluated a global definition, a later reference to that definition, and a
+  100,000-iteration expression. Kept an equal-priority observer task ready to
+  prove that safe-point yields transferred execution to another task.
+
+### Observed result
+
+- Five consecutive initial CTest runs passed, followed by three final runs
+  after explicitly hydrating OneDrive's generated JavaScript and Wasm files.
+- A representative Node run returned `answer`, then `42`, proving retained
+  Lisp state, and returned `100000` for the long evaluation.
+- The representative long evaluation yielded 47 times; the observer ran 49
+  times during it. Counts vary with host timing, as expected from a wall-clock
+  budget.
+- Chromium returned the same three results. The long evaluation yielded 100
+  times and the observer ran 102 times during it; the page reported
+  `FREEWISP_ULISP_TASK_PASS` with no console warnings or errors.
+- The generated source contained exactly one inserted safe-point call.
+- The unoptimised Asyncify build is 91,174 bytes of JavaScript and 501,229
+  bytes of WebAssembly.
+- Node intermittently reported the generated JavaScript as missing while
+  OneDrive represented it as an unhydrated reparse point. The file was present,
+  Chromium had already executed it successfully, and explicitly hydrating the
+  generated JavaScript and Wasm restored repeatable Node execution. This was a
+  host-filesystem artifact rather than a runtime failure.
+
+### Result
+
+Sequence step 4 is complete. The real uLisp evaluator now runs as a yielding
+FreeRTOS task and communicates through FreeRTOS queues. The next step is to run
+the runtime in a Web Worker and connect the browser UI through worker messages.
