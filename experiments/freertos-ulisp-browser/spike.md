@@ -432,3 +432,67 @@ during a long evaluation?
 Sequence step 4 is complete. The real uLisp evaluator now runs as a yielding
 FreeRTOS task and communicates through FreeRTOS queues. The next step is to run
 the runtime in a Web Worker and connect the browser UI through worker messages.
+
+## 2026-08-11 - Browser UI and Web Worker boundary
+
+### Question
+
+Can the combined runtime live entirely in a dedicated Web Worker while a
+responsive browser page submits expressions, controls dispatch, and receives
+results and runtime statistics through messages?
+
+### Method
+
+- Built a second worker-mode executable from the same uLisp/FreeRTOS runtime
+  source and shared Emscripten port used by the command-line proof.
+- Kept JavaScript-to-Wasm calls out of the page. A classic worker owns the
+  generated loader and exchanges structured `evaluate`, `control`, `ready`,
+  `status`, `result`, and `log` messages with the UI.
+- Added a FreeRTOS client task that polls the worker inbox, sends expressions
+  through the existing request queue, receives evaluator responses through the
+  response queue, and posts timing, tick, yield, and heap values.
+- Made Pause hold evaluation dispatch rather than freeze the kernel clock, so
+  the cooperative runtime can still receive Resume. Single tick admits one
+  queued expression while paused. Reset terminates and replaces the worker.
+- Added a terminal, controls, a 128x64 monochrome activity canvas, and minimal
+  live statistics.
+
+### Observed result
+
+- The original Node/CTest proof still passed after the shared-source change.
+- Chromium evaluated `(defvar browser-state 40)` and later returned `42` from
+  `(+ browser-state 2)`, proving state persisted across worker messages.
+- While paused, `(+ browser-state 3)` remained queued; Single tick released it
+  and returned `43` while the runtime remained paused.
+- Reset created fresh state: `(boundp 'browser-state)` returned `nil`.
+- A 100,000-iteration evaluation returned `100000` in 996.1 ms with 101
+  budgeted safe-point yields. The UI reported kernel tick 1039 and 365 KiB of
+  free FreeRTOS heap afterward. These are integration observations, not the
+  controlled measurements required by sequence step 6.
+- Chromium reported no console warnings or errors.
+- The unoptimised worker build is 92,504 bytes of JavaScript and 497,575 bytes
+  of WebAssembly.
+
+### Result
+
+Sequence step 5 is complete. The browser page remains outside the runtime and
+communicates with it through a working Worker message boundary. Next, measure
+size, memory, startup, scheduling behaviour, and pauses under a repeatable
+workload; the activity canvas is diagnostic and does not yet prove Lisp-driven
+display output.
+
+## 2026-08-11 - Local browser launcher
+
+Added `freertos-ulisp-task/serve.cmd` so the built worker UI can be served
+again without reconstructing the HTTP-server command. From the repository
+root, run:
+
+```powershell
+experiments\freertos-ulisp-browser\freertos-ulisp-task\serve.cmd
+```
+
+The script verifies that `build/index.html` exists and that Python is on
+`PATH`, then serves only the target's `build` directory at
+`http://127.0.0.1:8765/`. It binds to the loopback interface, runs in the
+foreground, and stops with `Ctrl+C`. If the build is absent, configure and
+build the target using the commands in `freertos-ulisp-task/README.md` first.

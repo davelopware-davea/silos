@@ -3,23 +3,57 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>FreeWisp FreeRTOS uLisp task proof</title>
+  <title>FreeWisp worker runtime</title>
   <style>
-    body { font: 16px/1.5 system-ui, sans-serif; margin: 2rem; }
-    pre { background: #111; color: #eee; padding: 1rem; white-space: pre-wrap; }
+    :root { color-scheme: dark; font: 15px/1.45 ui-monospace, Consolas, monospace; background: #090d0a; color: #d9e5dc; }
+    body { max-width: 70rem; margin: 0 auto; padding: 2rem; }
+    h1 { margin: 0; font: 700 1.45rem system-ui, sans-serif; color: #f1fff4; }
+    .lede { margin: .35rem 0 1.5rem; color: #91a398; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 19rem; gap: 1rem; }
+    .panel { background: #111813; border: 1px solid #29362d; border-radius: .65rem; padding: 1rem; }
+    #transcript { box-sizing: border-box; height: 25rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: #050806; border: 1px solid #29362d; padding: 1rem; }
+    form, .controls { display: flex; gap: .5rem; margin-top: .75rem; }
+    input { min-width: 0; flex: 1; padding: .65rem; font: inherit; background: #080c09; border: 1px solid #3b4e40; color: inherit; }
+    button { padding: .65rem .85rem; border: 1px solid #496052; border-radius: .3rem; background: #1a291e; color: inherit; font: inherit; cursor: pointer; }
+    button:disabled { cursor: default; opacity: .38; }
+    dl { display: grid; grid-template-columns: 1fr auto; gap: .45rem 1rem; margin: 1rem 0; }
+    dt { color: #91a398; } dd { margin: 0; }
+    canvas { width: 256px; height: 128px; image-rendering: pixelated; background: #07110b; border: 1px solid #38513e; }
+    .caption { margin: .45rem 0 0; color: #718176; font: .8rem system-ui, sans-serif; }
+    .prompt { color: #8dffad; } .result { color: #f4fff6; } .system { color: #84cfff; } .muted { color: #718176; } .error { color: #ff8d8d; }
+    @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } body { padding: 1rem; } }
   </style>
 </head>
 <body>
-  <h1>FreeWisp FreeRTOS uLisp task proof</h1>
-  <pre id="output">Starting…</pre>
-  <script>
-    const output = document.querySelector('#output');
-    output.textContent = '';
-    var Module = {
-      print(text) { output.textContent += `${text}\n`; },
-      printErr(text) { output.textContent += `ERROR: ${text}\n`; }
-    };
-  </script>
-  <script src="freewisp-freertos-ulisp-task.js"></script>
+  <h1>FreeWisp worker runtime</h1>
+  <p class="lede">uLisp running as a cooperative FreeRTOS task in WebAssembly, isolated from this page in a Web Worker.</p>
+  <main class="layout">
+    <section class="panel" aria-label="uLisp terminal">
+      <div id="transcript" aria-live="polite"></div>
+      <form id="repl">
+        <input id="expression" value="(+ 20 22)" aria-label="uLisp expression" autocomplete="off" disabled>
+        <button id="run" disabled>Queue</button>
+      </form>
+      <div class="controls" aria-label="Runtime controls">
+        <button id="start" type="button" disabled>Start</button>
+        <button id="pause" type="button" disabled>Pause</button>
+        <button id="reset" type="button">Reset</button>
+        <button id="step" type="button" disabled>Single tick</button>
+      </div>
+      <p class="caption">Pause holds queued evaluations; Single tick admits one queued expression. The FreeRTOS clock continues so worker messages remain responsive.</p>
+    </section>
+    <aside class="panel">
+      <canvas id="display" width="128" height="64" aria-label="128 by 64 monochrome activity display"></canvas>
+      <p class="caption">Worker activity: each column is one result; height is budget-yield count.</p>
+      <dl>
+        <dt>State</dt><dd id="state-value">starting</dd>
+        <dt>Kernel tick</dt><dd id="tick-value">0</dd>
+        <dt>Last evaluation</dt><dd id="time-value">-</dd>
+        <dt>Budget yields</dt><dd id="yield-value">-</dd>
+        <dt>FreeRTOS heap</dt><dd id="heap-value">-</dd>
+      </dl>
+    </aside>
+  </main>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

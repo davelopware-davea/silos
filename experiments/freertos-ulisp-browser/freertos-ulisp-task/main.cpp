@@ -12,6 +12,48 @@
 #include "queue.h"
 #include "task.h"
 
+#if defined(FREEWISP_WORKER_UI)
+EM_JS(int, freewisp_worker_receive_control, (), {
+  if (!globalThis.freewispControls || globalThis.freewispControls.length === 0) return 0;
+  const control = globalThis.freewispControls.shift();
+  if (control === 'pause') return 1;
+  if (control === 'resume') return 2;
+  if (control === 'step') return 3;
+  return 0;
+});
+
+EM_JS(int, freewisp_worker_receive_request,
+      (char *expression, int capacity, int *request_id), {
+  if (!globalThis.freewispRequests || globalThis.freewispRequests.length === 0) return 0;
+  const request = globalThis.freewispRequests.shift();
+  stringToUTF8(request.expression, expression, capacity);
+  HEAP32[request_id >> 2] = request.id;
+  return 1;
+});
+
+EM_JS(void, freewisp_worker_post_ready, (), {
+  postMessage({ type: 'ready' });
+});
+
+EM_JS(void, freewisp_worker_post_status, (int paused, unsigned long tick), {
+  postMessage({ type: 'status', paused: !!paused, tick });
+});
+
+EM_JS(void, freewisp_worker_post_result,
+      (int request_id, const char *output, unsigned long yields,
+       unsigned long tick, double elapsed_ms, size_t free_heap), {
+  postMessage({
+    type: 'result',
+    id: request_id,
+    output: UTF8ToString(output),
+    safePointYields: yields,
+    tick,
+    elapsedMs: elapsed_ms,
+    freeHeapBytes: free_heap
+  });
+});
+#endif
+
 HardwareSerial Serial;
 HardwareSerial Serial1;
 SPIClass SPI;
@@ -44,16 +86,20 @@ std::size_t OutputLength = 0;
 bool CaptureOutput = false;
 double YieldDeadline = 0.0;
 std::uint32_t SafePointYields = 0;
+#if !defined(FREEWISP_WORKER_UI)
 std::uint32_t ObserverRuns = 0;
+#endif
 
 int read_expression_character() {
   if (InputCursor == nullptr || *InputCursor == '\0') return '\n';
   return static_cast<unsigned char>(*InputCursor++);
 }
 
+#if !defined(FREEWISP_WORKER_UI)
 void set_request(EvalRequest &request, const char *expression) {
   std::snprintf(request.expression, sizeof(request.expression), "%s", expression);
 }
+#endif
 }
 
 void freewisp_serial_write(char value) {
@@ -133,6 +179,9 @@ void ulisp_task(void *) {
   EvalResponse response{};
 
   setup();
+#if defined(FREEWISP_WORKER_UI)
+  freewisp_worker_post_ready();
+#endif
   for (;;) {
     configASSERT(xQueueReceive(RequestQueue, &request, portMAX_DELAY) == pdPASS);
     evaluate(request, response);
@@ -140,6 +189,56 @@ void ulisp_task(void *) {
   }
 }
 
+#if defined(FREEWISP_WORKER_UI)
+void worker_client_task(void *) {
+  EvalRequest request{};
+  EvalResponse response{};
+  bool paused = false;
+  bool step_requested = false;
+  int request_id = 0;
+
+  freewisp_worker_post_status(paused, xTaskGetTickCount());
+  for (;;) {
+    switch (freewisp_worker_receive_control()) {
+      case 1:
+        paused = true;
+        step_requested = false;
+        freewisp_worker_post_status(paused, xTaskGetTickCount());
+        break;
+      case 2:
+        paused = false;
+        step_requested = false;
+        freewisp_worker_post_status(paused, xTaskGetTickCount());
+        break;
+      case 3:
+        if (paused) step_requested = true;
+        freewisp_worker_post_status(paused, xTaskGetTickCount());
+        break;
+      default:
+        break;
+    }
+
+    if ((!paused || step_requested) &&
+        freewisp_worker_receive_request(request.expression,
+                                        static_cast<int>(sizeof(request.expression)),
+                                        &request_id)) {
+      const double started = emscripten_get_now();
+      configASSERT(xQueueSend(RequestQueue, &request, portMAX_DELAY) == pdPASS);
+      configASSERT(xQueueReceive(ResponseQueue, &response, portMAX_DELAY) == pdPASS);
+      freewisp_worker_post_result(request_id,
+                                  response.output,
+                                  response.safe_point_yields,
+                                  xTaskGetTickCount(),
+                                  emscripten_get_now() - started,
+                                  xPortGetFreeHeapSize());
+      step_requested = false;
+      freewisp_worker_post_status(paused, xTaskGetTickCount());
+    }
+
+    vTaskDelay(1);
+  }
+}
+#else
 void observer_task(void *) {
   for (;;) {
     ++ObserverRuns;
@@ -194,6 +293,7 @@ void client_task(void *) {
   vTaskEndScheduler();
   std::abort();
 }
+#endif
 }
 
 extern "C" void vFreeWispAssert(const char *file, int line) {
@@ -221,6 +321,14 @@ int main() {
                            nullptr,
                            2,
                            nullptr) == pdPASS);
+#if defined(FREEWISP_WORKER_UI)
+  configASSERT(xTaskCreate(worker_client_task,
+                           "worker-client",
+                           HelperTaskStackBytes,
+                           nullptr,
+                           2,
+                           nullptr) == pdPASS);
+#else
   configASSERT(xTaskCreate(client_task,
                            "client",
                            HelperTaskStackBytes,
@@ -233,6 +341,7 @@ int main() {
                            nullptr,
                            2,
                            nullptr) == pdPASS);
+#endif
 
   vTaskStartScheduler();
   return 0;

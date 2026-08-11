@@ -40,7 +40,7 @@ string(REPLACE
 )
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/ulisp-generated.inc" "${ULISP_GENERATED_SOURCE}")
 
-add_executable(freewisp_freertos_ulisp_task
+set(FREEWISP_RUNTIME_SOURCES
   main.cpp
   "${FREERTOS_EMSCRIPTEN_PORT}/port.c"
   "${FREERTOS_KERNEL}/list.c"
@@ -49,36 +49,50 @@ add_executable(freewisp_freertos_ulisp_task
   "${FREERTOS_KERNEL}/portable/MemMang/heap_4.c"
 )
 
-target_compile_features(freewisp_freertos_ulisp_task PRIVATE c_std_11 cxx_std_17)
-target_compile_options(freewisp_freertos_ulisp_task PRIVATE
-  -Wall
-  -Wextra
-  -Werror
-  -Wno-unused-parameter
-  -Wno-unused-but-set-variable
-)
+function(configure_freewisp_runtime TARGET_NAME)
+  add_executable(${TARGET_NAME} ${FREEWISP_RUNTIME_SOURCES})
+  target_compile_features(${TARGET_NAME} PRIVATE c_std_11 cxx_std_17)
+  target_compile_options(${TARGET_NAME} PRIVATE
+    -Wall
+    -Wextra
+    -Werror
+    -Wno-unused-parameter
+    -Wno-unused-but-set-variable
+  )
+  target_include_directories(${TARGET_NAME} PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_BINARY_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../standalone-ulisp/compat"
+    "${FREERTOS_EMSCRIPTEN_PORT}"
+    "${FREERTOS_KERNEL}/include"
+  )
+  target_link_options(${TARGET_NAME} PRIVATE
+    "-sASYNCIFY=1"
+    "-sALLOW_MEMORY_GROWTH=1"
+    "-sASSERTIONS=1"
+  )
+endfunction()
+
+configure_freewisp_runtime(freewisp_freertos_ulisp_task)
+configure_freewisp_runtime(freewisp_freertos_ulisp_worker)
+
+target_compile_definitions(freewisp_freertos_ulisp_worker PRIVATE FREEWISP_WORKER_UI=1)
 set_source_files_properties(main.cpp PROPERTIES COMPILE_OPTIONS
   "-Wno-sometimes-uninitialized;-Wno-implicit-const-int-float-conversion"
-)
-target_include_directories(freewisp_freertos_ulisp_task PRIVATE
-  "${CMAKE_CURRENT_SOURCE_DIR}"
-  "${CMAKE_CURRENT_BINARY_DIR}"
-  "${CMAKE_CURRENT_SOURCE_DIR}/../standalone-ulisp/compat"
-  "${FREERTOS_EMSCRIPTEN_PORT}"
-  "${FREERTOS_KERNEL}/include"
-)
-target_link_options(freewisp_freertos_ulisp_task PRIVATE
-  "-sASYNCIFY=1"
-  "-sALLOW_MEMORY_GROWTH=1"
-  "-sASSERTIONS=1"
 )
 
 set_target_properties(freewisp_freertos_ulisp_task PROPERTIES
   OUTPUT_NAME "freewisp-freertos-ulisp-task"
   SUFFIX ".js"
 )
+set_target_properties(freewisp_freertos_ulisp_worker PROPERTIES
+  OUTPUT_NAME "freewisp-freertos-ulisp-worker"
+  SUFFIX ".js"
+)
 
 configure_file(index.html index.html COPYONLY)
+configure_file(worker.js worker.js COPYONLY)
+configure_file(app.ts app.js COPYONLY)
 
 enable_testing()
 add_test(NAME freertos_ulisp_task COMMAND freewisp_freertos_ulisp_task)

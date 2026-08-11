@@ -37,6 +37,7 @@ Run the real FreeRTOS kernel with uLisp in a browser, learning what can be share
 4. Run uLisp as a yielding FreeRTOS task.
    - **[done]** Ran the pinned uLisp evaluator in a FreeRTOS task, exchanged expressions and results with another task through queues, and yielded from generated `testescape()` safe points on a 5 ms wall-clock budget.
 5. Connect the browser UI through worker messages.
+   - **[done]** Moved the combined runtime behind a dedicated Web Worker, connected a terminal and controls with structured messages, and reported live kernel/evaluation statistics without calling Wasm from the page.
 6. Measure Wasm size, memory, startup time, scheduling behaviour, and pauses.
 
 ## Done when
