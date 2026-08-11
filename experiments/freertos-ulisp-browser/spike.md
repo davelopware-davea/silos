@@ -271,3 +271,114 @@ worked as expected.
 
 Sequence step 2, the standalone uLisp WebAssembly REPL, is complete. Next, pin
 FreeRTOS and begin the cooperative task, delay, queue, and software-timer proof.
+
+## 2026-08-11 - Pinned FreeRTOS kernel source
+
+### Question
+
+Which upstream FreeRTOS kernel baseline and vendoring boundary should the
+cooperative WebAssembly port use?
+
+### Method
+
+- Selected the current FreeRTOS-Kernel V11.3.0 release at commit
+  `9b777ae5c5b8e9e456065a00294d1e5f5f9facf5`.
+- Vendored an unmodified minimal snapshot: generic kernel sources, public
+  headers, `heap_4`, and the MIT licence.
+- Kept FreeWisp configuration and the future Emscripten port outside the
+  upstream directory so they can evolve without patching the dependency.
+- Compared SHA-256 hashes for all 29 copied upstream files against a clean,
+  shallow checkout before removing the temporary checkout.
+
+### Result
+
+The kernel dependency is pinned and verified. The next decision is the first
+cooperative scheduling mechanism to prove before implementing the port.
+
+## 2026-08-11 - Deterministic cooperative kernel proof
+
+### Question
+
+Can the real FreeRTOS kernel schedule Emscripten fibers cooperatively while
+preserving conventional C task stacks and supporting delays, queues, and
+software timers?
+
+### Method
+
+- Added a FreeWisp Emscripten port outside the pinned kernel snapshot.
+- Kept each FreeRTOS task allocation as its conventional C stack. Allocated
+  the Emscripten fiber context and its 4096-byte Asyncify continuation stack as
+  port-owned auxiliary storage, indexed by the task's stable stack marker.
+- Advanced one deterministic kernel tick at every cooperative yield.
+- Ran producer and consumer tasks at equal priority through a one-element
+  queue, delayed the producer between messages, and started a one-shot
+  software timer serviced by the real FreeRTOS timer daemon task.
+
+### Observed result
+
+- The CMake/Emscripten build completed with warnings treated as errors, except
+  for one explicitly suppressed unused upstream trace counter.
+- CTest passed in 0.73 seconds and printed
+  `trace=PCTPCPC ticks=9 received=3 timer=1` followed by
+  `FREEWISP_KERNEL_PROOF_PASS`.
+- The trace proves both application tasks ran, all three queue values arrived
+  in order, and the timer callback ran between task operations.
+- The unoptimised Asyncify build produced 80,079 bytes of JavaScript and a
+  104,133-byte WebAssembly module.
+
+### Result
+
+The deterministic proof satisfies the first half of sequence step 3. Next,
+replace yield-count ticks with an event-loop-driven monotonic clock and verify
+delays and software-timer timing against elapsed time.
+
+## 2026-08-11 - Event-loop-driven monotonic clock
+
+### Question
+
+Can the cooperative port keep FreeRTOS time from the host event loop without
+starving browser work, while preserving task delays and software-timer timing?
+
+### Method
+
+- Refactored all task yields through a central scheduler fiber rather than
+  switching directly between task fibers.
+- At each scheduler pass, yielded through Asyncify to the JavaScript event loop,
+  measured `emscripten_get_now()`, and advanced every elapsed FreeRTOS tick.
+- Used a Browser-specific 100 Hz tick rate. This is a platform configuration,
+  not a project-wide or ESP32 tick-rate decision.
+- Made the idle hook sleep until the next logical tick instead of spinning.
+- Added elapsed-time assertions for two-tick producer delays and a five-tick
+  one-shot software timer.
+- Ran the proof repeatedly under Node and served the same generated module to
+  the in-app Chromium browser.
+
+### Observed result
+
+- Ten consecutive CTest runs passed.
+- A representative Node run reported
+  `trace=PTCPCPC ticks=10 received=3 timer=1 timer_ms=56.04`
+  with producer gaps of 13.93 ms and 48.15 ms. The gaps exceed the minimum
+  elapsed duration; host event-loop jitter explains why they need not equal the
+  nominal two-tick delay.
+- Chromium reported
+  `trace=PCPCTPC ticks=6 received=3 timer=1 timer_ms=52.90`
+  with producer gaps of 18.70 ms and 26.30 ms, followed by
+  `FREEWISP_KERNEL_PROOF_PASS`; its console had no warnings or errors.
+- The resulting unoptimised Asyncify build is 80,470 bytes of JavaScript and
+  105,497 bytes of WebAssembly.
+
+### Result
+
+FreeRTOS tasks, delays, a queue, and a software timer now work with a real
+event-loop-driven clock in both Node and Chromium. Sequence step 3 is complete.
+The next spike step is to run uLisp as a yielding FreeRTOS task.
+
+### Follow-up refactor
+
+Moved the proven Emscripten port into a shared `emscripten-freertos-port`
+directory so the kernel proof and the combined uLisp runtime compile the same
+port implementation while retaining independent `FreeRTOSConfig.h` files.
+Made the task-table capacity and per-task Asyncify stack size target-configurable.
+The kernel proof rebuilt successfully and passed three consecutive regression
+runs after the move.

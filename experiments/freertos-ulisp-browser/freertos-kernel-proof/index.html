@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FreeWisp FreeRTOS kernel proof</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; margin: 2rem; }
+    pre { background: #111; color: #eee; padding: 1rem; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>FreeWisp FreeRTOS kernel proof</h1>
+  <pre id="output">Starting…</pre>
+  <script>
+    const output = document.querySelector('#output');
+    output.textContent = '';
+    var Module = {
+      print(text) { output.textContent += `${text}\n`; },
+      printErr(text) { output.textContent += `ERROR: ${text}\n`; }
+    };
+  </script>
+  <script src="freewisp-freertos-kernel-proof.js"></script>
+</body>
+</html>

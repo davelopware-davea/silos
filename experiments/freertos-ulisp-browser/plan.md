@@ -31,6 +31,9 @@ Run the real FreeRTOS kernel with uLisp in a browser, learning what can be share
    - **[done]** Compiled the real uLisp reader, evaluator, allocator, garbage collector, and printer to WebAssembly and verified arithmetic, lambdas, lists, and state retained across repeated calls.
    - **[done]** Served the included browser REPL and confirmed repeated interactive evaluation with persistent state in Chrome.
 3. Prove FreeRTOS tasks, delays, a queue, and a software timer.
+   - **[done]** Pinned an unmodified minimal FreeRTOS-Kernel V11.3.0 snapshot at commit `9b777ae5c5b8e9e456065a00294d1e5f5f9facf5`, with its MIT licence and revision metadata.
+   - **[done]** Proved cooperative scheduling, delays, queue transfer, and a software timer with deterministic manual ticks.
+   - **[done]** Replaced manual ticks with a Browser-specific 100 Hz event-loop-driven monotonic clock and verified delayed tasks and software timers against elapsed time.
 4. Run uLisp as a yielding FreeRTOS task.
 5. Connect the browser UI through worker messages.
 6. Measure Wasm size, memory, startup time, scheduling behaviour, and pauses.
