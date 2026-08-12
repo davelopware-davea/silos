@@ -496,3 +496,245 @@ The script verifies that `build/index.html` exists and that Python is on
 `http://127.0.0.1:8765/`. It binds to the loopback interface, runs in the
 foreground, and stops with `Ctrl+C`. If the build is absent, configure and
 build the target using the commands in `freertos-ulisp-task/README.md` first.
+
+## 2026-08-12 - Repeatable measurement harness
+
+### Purpose
+
+Prepare sequence step 6 so measurements come from a fixed workload through the
+real Chromium Worker boundary rather than from isolated interactive runs.
+
+### Method
+
+- Added a self-running `benchmark.html` page that starts a fresh Worker and
+  records cold worker-ready time and JavaScript/Wasm artifact sizes.
+- Added fixed warm-up, short-arithmetic, long-evaluation,
+  allocation-pressure, and explicit-GC cases with per-sample JSON output.
+- Reported Worker round-trip and evaluator time, kernel tick, safe-point
+  yields, current and minimum FreeRTOS heap, and current Wasm memory size.
+- Instrumented the evaluator's existing `testescape()` hook to record its
+  longest uninterrupted interval and counts over 100 ms and 250 ms. The final
+  interval through evaluation completion is included, so non-yielding garbage
+  collection can be observed.
+
+### Observed result
+
+- Both JavaScript files passed `node --check`.
+- The rebuilt command-line proof passed CTest in 2.25 seconds.
+- The loopback server returned the benchmark page and script with HTTP 200.
+- The unoptimised worker build is 93,287 bytes of JavaScript and 499,929 bytes
+  of WebAssembly after adding measurement fields.
+- After Codex restarted with the refreshed Browser plugin, three complete
+  Chromium runs produced 66 samples with no browser warnings or errors. Raw
+  results are preserved in
+  `freertos-ulisp-task/measurements/2026-08-12-chromium.json`.
+- Fresh Worker ready times were 136.6 ms, 85.5 ms, and 67.6 ms. Wasm memory
+  stayed at 17,563,648 bytes; current and minimum-ever FreeRTOS heap both
+  remained at 373,776 bytes throughout the workload.
+- Across 30 short-arithmetic samples, evaluator time averaged 17.0 ms
+  (13.2-26.7 ms). Across nine 100,000-iteration samples, it averaged 3,851.0
+  ms (2,799.7-5,025.4 ms) with 255.4 budget yields on average.
+- Across nine allocation-pressure samples, evaluator time averaged 879.5 ms
+  (597.6-1,257.4 ms). Fifteen explicit-GC samples averaged 16.2 ms total
+  evaluator time; the longest measured uninterrupted interval was 1.1 ms.
+- The longest uninterrupted interval anywhere in the three runs was 10.6 ms.
+  No interval exceeded 100 ms or 250 ms.
+
+### Result
+
+The repeatable harness is implemented, regression-tested, and verified through
+the Chromium Worker boundary. The next spike action is to interpret these
+measurements and decide whether the workload or instrumentation needs refinement
+before judging scheduling, memory, and pause behaviour.
+
+## 2026-08-12 - Measurement interpretation
+
+### Question
+
+Do the first three controlled Chromium runs support a step-6 viability judgment,
+or does the harness need refinement first?
+
+### Supported conclusions
+
+- The tested evaluator and allocation paths met the spike's provisional pause
+  policy: the largest gap between `testescape()` observations was 10.6 ms, with
+  no gaps over 100 ms or 250 ms.
+- The allocation-pressure expression creates far more temporary list cells than
+  the configured uLisp workspace can hold, so its 1.5 ms maximum observed gap
+  covers repeated automatic garbage collection as well as ordinary evaluation.
+- The runtime remained stable through 66 requests. FreeRTOS heap and allocated
+  Wasm linear memory did not grow during the workload.
+- Worker-message and cooperative scheduling overhead is material for tiny work:
+  short requests averaged 17.0 ms inside the worker and 26.2 ms round-trip. The
+  client's 10 ms polling delay and event-loop/fiber transitions are included;
+  this is not a pure evaluator benchmark.
+
+### Limits of the evidence
+
+- The long workload varied from 2,799.7 ms to 5,025.4 ms and was much slower
+  than the earlier 996.1 ms interactive observation. The runs were performed in
+  an automation-controlled background browser, so host load, browser warm-up,
+  and background scheduling are uncontrolled confounders.
+- The 67.6-136.6 ms Worker-ready values are fresh-Worker measurements on one
+  already-loaded page, not clean-cache page-startup measurements.
+- `HEAPU8.byteLength` reports allocated Wasm linear memory (16.75 MiB), not live
+  or peak used memory. The unchanged 365 KiB FreeRTOS heap measures only the
+  kernel allocator, not uLisp's static workspace, Emscripten stacks, or other
+  Wasm memory.
+- Final kernel ticks prove time advanced, but the harness does not measure tick
+  lateness, catch-up bursts, or scheduler jitter directly.
+- The pause instrument measures gaps between evaluator safe-point observations.
+  It does not report garbage-collection count/duration directly or observe
+  scheduler/event-loop stalls outside an evaluation.
+- Artifact sizes are from an unoptimised Asyncify build with assertions enabled;
+  they are a reproducible development baseline, not a release-size estimate.
+
+### Decision
+
+Refine the measurement harness before completing sequence step 6. Keep the
+current workload for comparison, but add:
+
+1. direct scheduler tick-lateness and catch-up statistics;
+2. direct GC count and maximum-duration statistics;
+3. clearer memory accounting for FreeRTOS, uLisp workspace, configured stacks,
+   and Wasm linear-memory allocation;
+4. an explicit visible-tab timing protocol with warm runs reported separately
+   from a fresh page/Worker run; and
+5. an optimised, assertions-disabled size build alongside the development build.
+
+The existing pause result is encouraging but provisional. No SilOS-level
+decision follows from these measurements yet.
+
+## 2026-08-12 - Refined scheduling, GC, memory, and release measurements
+
+### Question
+
+Can direct instrumentation close the evidence gaps in sequence step 6 without
+changing the proven runtime architecture?
+
+### Method
+
+- Added per-evaluation port counters for maximum tick lateness, scheduler passes,
+  multi-tick catch-up events, and maximum ticks advanced in one pass.
+- Inserted one GC start hook and one GC finish hook into the generated uLisp
+  adapter, leaving the pinned upstream source unchanged.
+- Reported FreeRTOS heap capacity/current/minimum, uLisp workspace/free bytes,
+  allocated Wasm linear memory, and the Wasm dynamic-memory top.
+- Distinguished a visible fresh-page Worker run from visible warm Worker reruns
+  and fixed navigation-to-ready timing at the actual Worker `ready` message.
+- Added an `-O2`, assertions-disabled Worker target for release-size comparison
+  and ran the full workload through it once as a browser smoke test.
+- Preserved three final development runs and one release smoke run in
+  `freertos-ulisp-task/measurements/2026-08-12-chromium-refined.json`.
+
+### Verification
+
+- Development Worker, release Worker, and command-line proof all built.
+- CTest passed after the instrumentation changes.
+- Generated source contained exactly one safe-point hook and one GC start/finish
+  pair. JavaScript syntax checks and `git diff --check` passed.
+- One release relink was temporarily denied access to its existing Wasm file
+  while the loopback server held it open. Stopping the server and retrying linked
+  successfully; this was a Windows/OneDrive file-handle artifact.
+- All 88 final Chromium samples completed with visible-page timing and no browser
+  warnings or errors.
+
+### Observed result
+
+- Development artifacts total 597,419 bytes: 93,916 bytes of JavaScript and
+  503,503 bytes of Wasm. Release artifacts total 422,640 bytes: 23,115 bytes of
+  JavaScript and 399,525 bytes of Wasm, 29.3% smaller in total.
+- The fresh development page reached Worker ready in 327.0 ms, of which Worker
+  creation and runtime initialisation took 91.8 ms. Two warm Workers took 196.3
+  ms and 117.2 ms. The release page/Worker figures were 269.3 ms and 153.7 ms.
+- Allocated Wasm linear memory stayed at 17,563,648 bytes while the dynamic-memory
+  top stayed at 749,568 bytes. The 524,288-byte FreeRTOS heap retained 373,728
+  bytes current and minimum-ever free, so its measured peak use was 150,560
+  bytes. uLisp's workspace was 73,728 bytes with 6,480-73,680 bytes free across
+  the workload.
+- Thirty short development requests averaged 17.7 ms inside the Worker and 28.8
+  ms round-trip. Nine long requests averaged 5,921.9 ms and nine
+  allocation-pressure requests averaged 1,411.7 ms; these host timings remain
+  workload/environment observations rather than portability requirements.
+- The nine long requests triggered 627 collections. Direct GC duration never
+  exceeded 1.0 ms; the largest evaluator safe-point gap was 11.9 ms. No tested
+  interval crossed 100 ms or 250 ms.
+- Under the long workload, a tick was at most 68.2 ms late and the scheduler
+  advanced at most seven ticks in one pass. Allocation pressure reached 23.6 ms
+  and three ticks. Catch-up preserved logical kernel time but confirms that the
+  Browser port cannot promise a regular physical 100 Hz cadence.
+- The release Worker completed the full workload. Its long requests averaged
+  4,497.3 ms, but one run is only a functional smoke test, not a stable
+  development-versus-release performance comparison.
+
+### Result
+
+Sequence step 6 is complete: size, startup, memory, scheduling, GC, and pause
+behaviour are now directly reported. The tested pause behaviour is comfortably
+inside the spike's thresholds. Scheduler catch-up is acceptable for this
+cooperative browser spike because the logical clock remains monotonic and the UI
+runs in another thread, but tick cadence is not real-time and must not be treated
+as such.
+
+The remaining FreeWisp completion gap is the simulated display: it still shows
+diagnostic page activity rather than Lisp/runtime-driven pixels. No SilOS-level
+decision follows automatically, and the main SilOS plan remains unchanged.
+
+## 2026-08-12 - Lisp-driven simulated display
+
+### Question
+
+Can Lisp running in the FreeRTOS task drive the 128x64 browser display through
+the existing Worker boundary, including pause, single-step, and reset controls?
+
+### Method
+
+- Added `(display-clear [state])` and `(display-pixel x y state)` to the
+  generated uLisp adapter without changing the pinned upstream source.
+- Appended the generated builtin entries after every upstream entry so existing
+  uLisp builtin indices remain unchanged.
+- Stored pixels in a runtime-owned 1,024-byte packed monochrome framebuffer.
+  Pixel operations change a revision counter; the Worker transfers the complete
+  framebuffer only after an evaluation that changed the revision.
+- Replaced the page's diagnostic activity graph with framebuffer rendering. The
+  page reports lit-pixel count and revision and still never calls Wasm directly.
+- Extended the command-line proof to clear the framebuffer, set pixel `(7,9)`
+  from Lisp, and assert the corresponding packed bit.
+
+### Observed result
+
+- Development Worker, release Worker, and command-line proof rebuilt. CTest
+  passed, and the direct proof printed `display_pixel_set=yes revision=2` and
+  `FREEWISP_ULISP_TASK_PASS`.
+- Generated source contained exactly one definition and one table entry for
+  each display primitive.
+- In Chromium, a three-pixel Lisp expression queued while paused left the canvas
+  at `0 pixels / rev 0`. Single tick evaluated it, returned `t`, rendered
+  `3 pixels / rev 4`, and left the runtime paused.
+- The canvas recorded revision 4 and three lit pixels. Reset replaced the Worker
+  and restored `0 pixels / rev 0`. Chromium reported no warnings or errors.
+- The final development artifacts are 94,170 bytes of JavaScript and 505,342
+  bytes of Wasm. The final release artifacts are 23,327 bytes of JavaScript and
+  400,276 bytes of Wasm.
+
+### Result
+
+Sequence step 7 and the FreeWisp completion criteria are satisfied. The browser
+now runs uLisp in a genuine FreeRTOS task, exchanges requests through queues,
+delays without freezing the page, drives the simulated display from Lisp, and
+reports the required measurements.
+
+This completes the FreeWisp spike as an experiment. It supplies evidence for a
+possible Browser substrate but does not itself promote any architectural choice
+into the main SilOS plan; that requires explicit user approval.
+
+## 2026-08-12 - Project-level conclusion promoted
+
+With explicit user approval, the completed spike's conclusion was promoted to
+the project plan: FreeWisp will be used provisionally as the Browser substrate
+for the first end-to-end SilOS prototype.
+
+This is deliberately narrower than adopting FreeRTOS or uLisp as the final
+cross-target architecture. The prototype must still test ESP32 fit, shared
+Browser/MCU code, live memory-to-display binding, and the continuing suitability
+of the selected kernel and language.

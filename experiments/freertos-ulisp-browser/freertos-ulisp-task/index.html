@@ -43,14 +43,15 @@
       <p class="caption">Pause holds queued evaluations; Single tick admits one queued expression. The FreeRTOS clock continues so worker messages remain responsive.</p>
     </section>
     <aside class="panel">
-      <canvas id="display" width="128" height="64" aria-label="128 by 64 monochrome activity display"></canvas>
-      <p class="caption">Worker activity: each column is one result; height is budget-yield count.</p>
+      <canvas id="display" width="128" height="64" aria-label="128 by 64 Lisp-driven monochrome display"></canvas>
+      <p class="caption">Framebuffer pixels set by Lisp through <code>display-pixel</code> and <code>display-clear</code>.</p>
       <dl>
         <dt>State</dt><dd id="state-value">starting</dd>
         <dt>Kernel tick</dt><dd id="tick-value">0</dd>
         <dt>Last evaluation</dt><dd id="time-value">-</dd>
         <dt>Budget yields</dt><dd id="yield-value">-</dd>
         <dt>FreeRTOS heap</dt><dd id="heap-value">-</dd>
+        <dt>Display</dt><dd id="display-value">0 pixels / rev 0</dd>
       </dl>
     </aside>
   </main>

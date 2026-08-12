@@ -144,7 +144,15 @@ The prototype is complete when it:
 
 The first prototype may omit polish, general-purpose APIs, dynamic application loading, networking, authentication, sound, multitasking, and the later reference applications.
 
-The active [FreeWisp spike](../../experiments/freertos-ulisp-browser/plan.md) will test FreeRTOS and uLisp in a cooperative WebAssembly runtime as one possible Browser substrate. Its results are evidence, not yet an architectural commitment.
+### Provisional Browser substrate
+
+The completed [FreeWisp spike](../../experiments/freertos-ulisp-browser/plan.md) demonstrated that the real FreeRTOS kernel and uLisp evaluator can run together in browser WebAssembly using cooperative Emscripten fibers. The runtime operated in a dedicated Web Worker, communicated through FreeRTOS queues and Worker messages, yielded during long evaluations, and drove a 128x64 framebuffer from Lisp without freezing the page.
+
+For the first end-to-end prototype, SilOS will provisionally use FreeWisp as the Browser substrate. This is a prototype choice, not a final commitment to FreeRTOS or uLisp across all targets.
+
+The evidence supporting this choice includes evaluator safe-point gaps no longer than 11.9 ms in the tested workload, garbage collections no longer than 1.0 ms, and final optimised Browser artifacts totalling about 424 KiB. The Browser scheduler preserves monotonic logical time but is not real-time: ticks may be late and advance in catch-up bursts.
+
+FreeWisp's explicit pixel primitives prove the language-to-display path but do not answer the live memory-to-display binding questions. The prototype must still establish ESP32 fit, substantially shared Browser/MCU code, the shared platform interfaces, and whether uLisp and FreeRTOS remain appropriate beyond this provisional Browser role.
 
 ## 5. Questions to answer during this milestone
 

@@ -38,6 +38,51 @@ string(REPLACE
   ULISP_GENERATED_SOURCE
   "${ULISP_GENERATED_SOURCE}"
 )
+string(REPLACE
+  "void gc (object *form, object *env) {"
+  "void gc (object *form, object *env) {\n  freewisp_gc_started();"
+  ULISP_GENERATED_SOURCE
+  "${ULISP_GENERATED_SOURCE}"
+)
+string(REPLACE
+  "  #endif\n}\n\n// Compact image"
+  "  #endif\n  freewisp_gc_finished();\n}\n\n// Compact image"
+  ULISP_GENERATED_SOURCE
+  "${ULISP_GENERATED_SOURCE}"
+)
+set(FREEWISP_DISPLAY_EXTENSION [[
+const char doc_displayclear[] = "(display-clear [state])\nClear the 128x64 display, or fill it when state is non-nil.";
+const char doc_displaypixel[] = "(display-pixel x y state)\nSet a pixel when state is non-nil and clear it otherwise.";
+
+object *fn_displayclear (object *args, object *env) {
+  (void) env;
+  object *state = args == NULL ? nil : first(args);
+  freewisp_display_clear(state != nil);
+  return state;
+}
+
+object *fn_displaypixel (object *args, object *env) {
+  (void) env;
+  int x = checkinteger(first(args));
+  int y = checkinteger(second(args));
+  object *state = third(args);
+  freewisp_display_pixel(x, y, state != nil);
+  return state;
+}
+
+]])
+string(REPLACE
+  "// Built-in symbol lookup table"
+  "${FREEWISP_DISPLAY_EXTENSION}// Built-in symbol lookup table"
+  ULISP_GENERATED_SOURCE
+  "${ULISP_GENERATED_SOURCE}"
+)
+string(REPLACE
+  "  { \":output\", (fn_ptr_type)OUTPUT, PINMODE, NULL },\n};"
+  "  { \":output\", (fn_ptr_type)OUTPUT, PINMODE, NULL },\n  { \"display-clear\", fn_displayclear, 0201, doc_displayclear },\n  { \"display-pixel\", fn_displaypixel, 0233, doc_displaypixel },\n};"
+  ULISP_GENERATED_SOURCE
+  "${ULISP_GENERATED_SOURCE}"
+)
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/ulisp-generated.inc" "${ULISP_GENERATED_SOURCE}")
 
 set(FREEWISP_RUNTIME_SOURCES
@@ -49,7 +94,7 @@ set(FREEWISP_RUNTIME_SOURCES
   "${FREERTOS_KERNEL}/portable/MemMang/heap_4.c"
 )
 
-function(configure_freewisp_runtime TARGET_NAME)
+function(configure_freewisp_runtime TARGET_NAME ASSERTIONS)
   add_executable(${TARGET_NAME} ${FREEWISP_RUNTIME_SOURCES})
   target_compile_features(${TARGET_NAME} PRIVATE c_std_11 cxx_std_17)
   target_compile_options(${TARGET_NAME} PRIVATE
@@ -69,14 +114,18 @@ function(configure_freewisp_runtime TARGET_NAME)
   target_link_options(${TARGET_NAME} PRIVATE
     "-sASYNCIFY=1"
     "-sALLOW_MEMORY_GROWTH=1"
-    "-sASSERTIONS=1"
+    "-sASSERTIONS=${ASSERTIONS}"
   )
 endfunction()
 
-configure_freewisp_runtime(freewisp_freertos_ulisp_task)
-configure_freewisp_runtime(freewisp_freertos_ulisp_worker)
+configure_freewisp_runtime(freewisp_freertos_ulisp_task 1)
+configure_freewisp_runtime(freewisp_freertos_ulisp_worker 1)
+configure_freewisp_runtime(freewisp_freertos_ulisp_worker_release 0)
 
 target_compile_definitions(freewisp_freertos_ulisp_worker PRIVATE FREEWISP_WORKER_UI=1)
+target_compile_definitions(freewisp_freertos_ulisp_worker_release PRIVATE FREEWISP_WORKER_UI=1)
+target_compile_options(freewisp_freertos_ulisp_worker_release PRIVATE -O2)
+target_link_options(freewisp_freertos_ulisp_worker_release PRIVATE -O2)
 set_source_files_properties(main.cpp PROPERTIES COMPILE_OPTIONS
   "-Wno-sometimes-uninitialized;-Wno-implicit-const-int-float-conversion"
 )
@@ -89,10 +138,16 @@ set_target_properties(freewisp_freertos_ulisp_worker PROPERTIES
   OUTPUT_NAME "freewisp-freertos-ulisp-worker"
   SUFFIX ".js"
 )
+set_target_properties(freewisp_freertos_ulisp_worker_release PROPERTIES
+  OUTPUT_NAME "freewisp-freertos-ulisp-worker-release"
+  SUFFIX ".js"
+)
 
 configure_file(index.html index.html COPYONLY)
 configure_file(worker.js worker.js COPYONLY)
 configure_file(app.ts app.js COPYONLY)
+configure_file(benchmark.html benchmark.html COPYONLY)
+configure_file(benchmark.js benchmark.js COPYONLY)
 
 enable_testing()
 add_test(NAME freertos_ulisp_task COMMAND freewisp_freertos_ulisp_task)

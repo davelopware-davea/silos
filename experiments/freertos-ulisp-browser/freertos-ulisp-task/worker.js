@@ -23,4 +23,7 @@ var Module = {
   printErr(text) { postMessage({ type: 'log', stream: 'stderr', text }); }
 };
 
-importScripts('freewisp-freertos-ulisp-worker.js');
+const runtime = new URL(self.location.href).searchParams.get('runtime');
+importScripts(runtime === 'release'
+  ? 'freewisp-freertos-ulisp-worker-release.js'
+  : 'freewisp-freertos-ulisp-worker.js');

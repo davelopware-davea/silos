@@ -15,6 +15,14 @@ typedef int BaseType_t;
 typedef unsigned int UBaseType_t;
 typedef uint32_t TickType_t;
 
+typedef struct FreeWispPortStats
+{
+    double max_tick_lateness_ms;
+    uint32_t scheduler_passes;
+    uint32_t tick_catchup_events;
+    uint32_t max_ticks_per_pass;
+} FreeWispPortStats;
+
 #define portMAX_DELAY               ( TickType_t ) UINT32_MAX
 #define portTICK_TYPE_IS_ATOMIC      1
 #define portSTACK_GROWTH             ( -1 )
@@ -35,6 +43,8 @@ void vPortWaitForTick( void );
 void vPortEnterCritical( void );
 void vPortExitCritical( void );
 void vPortCleanUpTCB( void * tcb );
+void vPortResetStats( void );
+void vPortGetStats( FreeWispPortStats * stats );
 
 #define portYIELD()                  vPortYield()
 #define portYIELD_WITHIN_API()       vPortYield()

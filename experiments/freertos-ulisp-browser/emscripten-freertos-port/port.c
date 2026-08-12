@@ -39,6 +39,7 @@ static UBaseType_t uxCriticalNesting;
 static BaseType_t xSchedulerStarted;
 static BaseType_t xWaitForTickRequested;
 static double dNextTickTime;
+static FreeWispPortStats xPortStats;
 
 static StackType_t * prvCurrentStackMarker( void )
 {
@@ -156,16 +157,55 @@ BaseType_t xPortStartScheduler( void )
         }
 
         now = emscripten_get_now();
-        while( now >= dNextTickTime )
+        ++xPortStats.scheduler_passes;
+        if( now >= dNextTickTime )
         {
-            ( void ) xTaskIncrementTick();
-            dNextTickTime += tick_period_ms;
+            const double lateness_ms = now - dNextTickTime;
+
+            if( lateness_ms > xPortStats.max_tick_lateness_ms )
+            {
+                xPortStats.max_tick_lateness_ms = lateness_ms;
+            }
+        }
+
+        {
+            uint32_t ticks_advanced = 0;
+
+            while( now >= dNextTickTime )
+            {
+                ( void ) xTaskIncrementTick();
+                dNextTickTime += tick_period_ms;
+                ++ticks_advanced;
+            }
+
+            if( ticks_advanced > 1U )
+            {
+                ++xPortStats.tick_catchup_events;
+            }
+            if( ticks_advanced > xPortStats.max_ticks_per_pass )
+            {
+                xPortStats.max_ticks_per_pass = ticks_advanced;
+            }
         }
 
         vTaskSwitchContext();
     }
 
     return pdFALSE;
+}
+
+void vPortResetStats( void )
+{
+    xPortStats.max_tick_lateness_ms = 0.0;
+    xPortStats.scheduler_passes = 0U;
+    xPortStats.tick_catchup_events = 0U;
+    xPortStats.max_ticks_per_pass = 0U;
+}
+
+void vPortGetStats( FreeWispPortStats * stats )
+{
+    configASSERT( stats != NULL );
+    *stats = xPortStats;
 }
 
 void vPortEndScheduler( void )

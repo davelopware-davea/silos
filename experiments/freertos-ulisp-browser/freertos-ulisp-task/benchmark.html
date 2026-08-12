@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FreeWisp measurement harness</title>
+  <style>
+    :root { color-scheme: dark; font: 15px/1.45 ui-monospace, Consolas, monospace; background: #090d0a; color: #d9e5dc; }
+    body { max-width: 76rem; margin: 0 auto; padding: 2rem; }
+    h1 { margin: 0; font: 700 1.45rem system-ui, sans-serif; color: #f1fff4; }
+    p { color: #91a398; }
+    .controls { display: flex; align-items: center; gap: .75rem; margin: 1rem 0; }
+    button { padding: .65rem .85rem; border: 1px solid #496052; border-radius: .3rem; background: #1a291e; color: inherit; font: inherit; cursor: pointer; }
+    button:disabled { cursor: default; opacity: .38; }
+    pre { min-height: 24rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: #050806; border: 1px solid #29362d; border-radius: .65rem; padding: 1rem; }
+    #status { color: #8dffad; }
+  </style>
+</head>
+<body>
+  <h1>FreeWisp measurement harness</h1>
+  <p>Repeatable measurements through the same dedicated Worker boundary as the interactive runtime.</p>
+  <div class="controls">
+    <button id="run" type="button">Run benchmark</button>
+    <button id="download" type="button" disabled>Download JSON</button>
+    <span id="status">idle</span>
+  </div>
+  <pre id="output" aria-live="polite"></pre>
+  <script type="module" src="benchmark.js"></script>
+</body>
+</html>

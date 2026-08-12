@@ -13,6 +13,7 @@ const tickValue = document.querySelector('#tick-value');
 const timeValue = document.querySelector('#time-value');
 const yieldValue = document.querySelector('#yield-value');
 const heapValue = document.querySelector('#heap-value');
+const displayValue = document.querySelector('#display-value');
 const canvas = document.querySelector('#display');
 const context = canvas.getContext('2d');
 
@@ -38,14 +39,22 @@ function setControls() {
   stateValue.textContent = !ready ? 'starting' : paused ? 'paused' : 'running';
 }
 
-function drawActivity(result) {
-  const image = context.getImageData(1, 0, 127, 64);
+function drawDisplay(message) {
+  const image = context.createImageData(128, 64);
+  let litPixels = 0;
+  for (let bit = 0; bit < 128 * 64; bit += 1) {
+    const on = (message.pixels[bit >> 3] & (1 << (bit & 7))) !== 0;
+    const offset = bit * 4;
+    image.data[offset] = on ? 141 : 7;
+    image.data[offset + 1] = on ? 255 : 17;
+    image.data[offset + 2] = on ? 173 : 11;
+    image.data[offset + 3] = 255;
+    if (on) litPixels += 1;
+  }
   context.putImageData(image, 0, 0);
-  context.fillStyle = '#07110b';
-  context.fillRect(127, 0, 1, 64);
-  const height = Math.min(64, Math.max(1, result.safePointYields));
-  context.fillStyle = '#8dffad';
-  context.fillRect(127, 64 - height, 1, height);
+  canvas.dataset.revision = String(message.revision);
+  canvas.dataset.litPixels = String(litPixels);
+  displayValue.textContent = `${litPixels} pixels / rev ${message.revision}`;
 }
 
 function startWorker() {
@@ -56,6 +65,9 @@ function startWorker() {
   append('Starting worker runtime...\n', 'muted');
   context.fillStyle = '#07110b';
   context.fillRect(0, 0, 128, 64);
+  delete canvas.dataset.revision;
+  delete canvas.dataset.litPixels;
+  displayValue.textContent = '0 pixels / rev 0';
   setControls();
 
   worker = new Worker('worker.js');
@@ -75,7 +87,8 @@ function startWorker() {
       timeValue.textContent = `${message.elapsedMs.toFixed(1)} ms`;
       yieldValue.textContent = String(message.safePointYields);
       heapValue.textContent = `${Math.round(message.freeHeapBytes / 1024)} KiB`;
-      drawActivity(message);
+    } else if (message.type === 'display') {
+      drawDisplay(message);
     } else if (message.type === 'log') {
       append(`${message.text}\n`, message.stream === 'stderr' ? 'error' : 'muted');
     }

@@ -4,6 +4,8 @@
 
 **Experimental journal:** [spike.md](spike.md)
 
+**Status:** Complete
+
 ## Goal
 
 Run the real FreeRTOS kernel with uLisp in a browser, learning what can be shared with the ESP32 target.
@@ -39,6 +41,27 @@ Run the real FreeRTOS kernel with uLisp in a browser, learning what can be share
 5. Connect the browser UI through worker messages.
    - **[done]** Moved the combined runtime behind a dedicated Web Worker, connected a terminal and controls with structured messages, and reported live kernel/evaluation statistics without calling Wasm from the page.
 6. Measure Wasm size, memory, startup time, scheduling behaviour, and pauses.
+   - **[done]** Ran repeatable visible-Chromium development and release workloads with direct GC, scheduler, memory, startup, and artifact-size reporting.
+   - **[done]** Observed a maximum 11.9 ms evaluator safe-point gap and 1.0 ms GC duration; no tested pause crossed 100 ms or 250 ms.
+   - **[done]** Characterised the 100 Hz cooperative clock as logically monotonic with catch-up bursts of up to seven ticks after a maximum observed 68.2 ms lateness under load.
+7. Drive the simulated display from Lisp/runtime output rather than diagnostic page activity.
+   - **[done]** Added Lisp-visible `display-clear` and `display-pixel` primitives backed by a runtime-owned packed 128x64 framebuffer.
+   - **[done]** Transferred changed framebuffers from the Worker to the page and verified paused queueing, single-step rendering, and reset in Chromium.
+
+All sequence steps and the FreeWisp completion criteria are now satisfied.
+
+## Results
+
+- The real FreeRTOS kernel and pinned uLisp evaluator run together in browser WebAssembly without pthreads. Tasks, queues, delays, software timers, persistent Lisp state, and cooperative safe-point yields all worked.
+- A dedicated Web Worker isolates the runtime from the page. Long evaluations do not freeze the UI, and structured messages carry requests, results, controls, statistics, and display framebuffers.
+- The tested pause behaviour is suitable for this prototype: the largest evaluator safe-point gap was 11.9 ms and the longest measured garbage collection was 1.0 ms.
+- The event-loop-driven 100 Hz clock preserves monotonic logical time but is not real-time. Under load, a tick was up to 68.2 ms late and the scheduler advanced up to seven ticks in one catch-up pass.
+- The final optimised Browser artifacts total 423,603 bytes. The measured Wasm dynamic-memory top was about 750 KiB; this does not establish ESP32 memory use.
+- Lisp successfully drove a runtime-owned 128x64 framebuffer through the Worker to the browser canvas. This proves the language-to-display path, not SilOS's live memory-to-display binding.
+
+## Conclusion
+
+FreeWisp is a viable Browser substrate for the first SilOS prototype and may be used provisionally for that purpose. The spike does not establish that FreeRTOS or uLisp is the final cross-target architecture, that the same configuration fits the reference ESP32, or that enough Browser and MCU code can be shared. Those questions belong to the end-to-end prototype.
 
 ## Done when
 
