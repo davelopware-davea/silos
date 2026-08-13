@@ -144,6 +144,10 @@ The prototype is complete when it:
 
 The first prototype may omit polish, general-purpose APIs, dynamic application loading, networking, authentication, sound, multitasking, and the later reference applications.
 
+### Current variable-binding hypothesis
+
+The current prototype direction is summarised in [Discussion: Variable Binding and Templates](Discussion-VariableBindingAndTemplates.md). It separates exposing a uLisp variable once from rendering that binding any number of times through reusable, screen-independent flow templates. A Shell UI task owns template interpretation and the framebuffer and initially redraws the complete active template on every refresh. These details remain hypotheses to test rather than settled architecture.
+
 ### Provisional Browser substrate
 
 The completed [FreeWisp spike](../../experiments/freertos-ulisp-browser/plan.md) demonstrated that the real FreeRTOS kernel and uLisp evaluator can run together in browser WebAssembly using cooperative Emscripten fibers. The runtime operated in a dedicated Web Worker, communicated through FreeRTOS queues and Worker messages, yielded during long evaluations, and drove a 128x64 framebuffer from Lisp without freezing the page.
@@ -153,6 +157,8 @@ For the first end-to-end prototype, SilOS will provisionally use FreeWisp as the
 The evidence supporting this choice includes evaluator safe-point gaps no longer than 11.9 ms in the tested workload, garbage collections no longer than 1.0 ms, and final optimised Browser artifacts totalling about 424 KiB. The Browser scheduler preserves monotonic logical time but is not real-time: ticks may be late and advance in catch-up bursts.
 
 FreeWisp's explicit pixel primitives prove the language-to-display path but do not answer the live memory-to-display binding questions. The prototype must still establish ESP32 fit, substantially shared Browser/MCU code, the shared platform interfaces, and whether uLisp and FreeRTOS remain appropriate beyond this provisional Browser role.
+
+FreeWisp is complete and is no longer an active work plan. Its detailed plan, experimental journal, source, and measurements are historical evidence and should be loaded into context only when FreeWisp is specifically requested or referenced. The summary above is sufficient context for ordinary work on the current prototype.
 
 ## 5. Questions to answer during this milestone
 
