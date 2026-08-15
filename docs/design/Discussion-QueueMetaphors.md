@@ -1,12 +1,12 @@
 # Discussion: Queue Metaphors
 
-Conversation recorded on 14 August 2026.
+Conversation begun on 14 August 2026; updated on 15 August 2026.
 
 ## Purpose
 
-This note records an exploratory storage model for SilOS. It is discussion
-material, not an agreed design or a replacement for the authoritative SilOS
-plan.
+This note records exploratory queue-and-binding models for SilOS storage and
+MQTT networking. It is discussion material, not an agreed design or a
+replacement for the authoritative SilOS plan.
 
 ## BoundQueueStore model
 
@@ -210,16 +210,110 @@ A storage ID such as `"todos"` plays a role somewhat like a filename, but names
 a stored data object rather than an opened stream. A structured object may
 contain fixed-layout records; a binary object may contain uninterpreted bytes.
 
+## MQTT networking extension
+
+The same asynchronous Ref and watch conventions could support an intentionally
+opinionated networking API that exposes MQTT only to uLisp applications. TCP,
+UDP, HTTP, and MQTT client internals would remain platform implementation
+details.
+
+This MQTT application of the approach is provisionally called
+**BoundQueueMQTT**.
+
+The current MQTT API sketch is collected separately in
+[API-BoundQueueMQTT.md](API-BoundQueueMQTT.md).
+
+Publishing returns an operation Ref whose status records progress:
+
+```lisp
+(mqtt-publish "chat/outbox/alice" "Hello" 1)
+```
+
+```text
+pending -> queued -> sent -> acknowledged
+                         -> error
+```
+
+The exact progression depends on MQTT QoS. Subscribing binds a bounded window
+of immutable messages rather than binding each message independently:
+
+```lisp
+(defvar inbox
+  (mqtt-subscribe "chat/inbox/+" 'fifo 5))
+```
+
+Its conceptual shape is:
+
+```text
+{
+  meta: {
+    operation: subscribe,
+    status: ready,
+    mode: fifo,
+    limit: 5,
+    waiting: 3,
+    dropped: 0
+  },
+  value: [up to five immutable MessageRefs]
+}
+```
+
+A MessageRef contains MQTT metadata such as topic, QoS, retained flag, and a
+local sequence or receipt identity, plus the immutable payload. It does not
+have the two-way row and revision semantics of a StoreRowRef.
+
+New arrivals do not change the current window while application code may still
+be processing it. Instead, `meta.waiting` counts messages received since the
+window was last updated, and a watch reports that count:
+
+```lisp
+(mqtt-ref-watch inbox
+  (lambda (live waiting)
+    ...))
+```
+
+The application advances the window explicitly when ready:
+
+```lisp
+(mqtt-ref-update inbox)
+```
+
+Two initial modes cover different uses:
+
+- `fifo` consumes the current window and loads the next oldest messages, making
+  it suitable for chat, commands, and other ordered work;
+- `latest` replaces the window with the newest messages and skips superseded
+  arrivals, making it suitable for telemetry and dashboards.
+
+The subscription retains only the current window plus a bounded backlog.
+Transient `latest` subscriptions can use a small RAM ring, potentially only one
+pending payload. Reliable chat or command subscriptions can spool directly into
+a BoundQueueStore store, ideally before acknowledging a QoS 1 message. The first
+SilOS chat use case would most likely use a FIFO window backed by its existing
+durable message store rather than an unbounded MQTT inbox in RAM.
+
+MQTT retained topics support a distinct, closer form of live binding:
+
+```lisp
+(mqtt-bind "house/temperature")
+```
+
+An MqttValueRef represents the latest retained value and can optionally be
+two-way, with a local update publishing a new retained value. This behaviour is
+appropriate for state topics, but must not be applied to ordinary immutable
+event messages.
+
 ## Scheduling and ownership
 
 Only the uLisp task executes Lisp code or modifies the uLisp workspace. The
-storage task performs requests and sends completion or change messages; it does
-not invoke Lisp closures or mutate StoreRefs or StoreRowRefs directly.
+storage and MQTT tasks perform requests and send completion, change, or arrival
+messages; they do not invoke Lisp closures or mutate uLisp-visible Refs
+directly.
 
 The uLisp task receives each message and safely updates the associated binding.
 SilOS therefore needs a small, bounded binding table whose handles are visible
 as roots to uLisp garbage collection. Releasing a binding removes its storage
-subscription and table entry.
+or MQTT subscription and table entry.
 
 Bulk data need not be copied into queue messages. Messages can carry bounded
 descriptors, buffer handles, status, revisions, and correlation IDs. Stable
@@ -233,5 +327,7 @@ unowned pointers into the uLisp workspace.
 - What happens when the bounded binding or request table is full?
 - What optimistic-write and conflict policy is simplest and least surprising?
 - Should stored objects be record collections, binary blobs, or both?
-- Can networking reuse the request/completion machinery without inheriting
-  storage-specific binding semantics?
+- What bounded MQTT backlog and overflow policies apply to each QoS level?
+- When must a durable inbound MQTT message be committed before acknowledgement?
+- Which Ref machinery can storage and MQTT share without giving immutable
+  messages inappropriate StoreRowRef semantics?

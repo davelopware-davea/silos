@@ -10,6 +10,10 @@ BoundQueueStore model described in
 API specification, not yet a committed SilOS interface. Examples use
 JSON-like notation where the exact uLisp representation remains undecided.
 
+The companion [API-BoundQueueMQTT.md](API-BoundQueueMQTT.md) applies the same
+asynchronous Ref conventions to MQTT while preserving the different semantics
+of immutable network messages.
+
 ## Model
 
 BoundQueueStore exposes storage through asynchronous operations and live,
