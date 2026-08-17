@@ -14,6 +14,19 @@ The companion [API-BoundQueueMQTT.md](API-BoundQueueMQTT.md) applies the same
 asynchronous Ref conventions to MQTT while preserving the different semantics
 of immutable network messages.
 
+## Contents
+
+1. [Status](#status)
+2. [Model](#model)
+3. [Names](#names)
+4. [Common values](#common-values)
+5. [Store management](#store-management)
+6. [Reading and binding rows](#reading-and-binding-rows)
+7. [Changing rows](#changing-rows)
+8. [Watches](#watches)
+9. [UI composition](#ui-composition)
+10. [Deferred extensions](#deferred-extensions)
+
 ## Model
 
 BoundQueueStore exposes storage through asynchronous operations and live,

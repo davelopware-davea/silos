@@ -2,6 +2,19 @@
 
 Conversation recorded on 8 August 2026.
 
+**Related:** [Variable Binding and Templates](Discussion-VariableBindingAndTemplates.md)
+is the current, more concise prototype discussion. [Shell UI](Discussion-Shell-UI.md)
+extends it with focus and editing behaviour.
+
+## Contents
+
+1. [Initial question](#initial-question)
+2. [Supporting strings](#supporting-strings)
+3. [Avoiding persistent copies](#avoiding-persistent-copies)
+4. [Multiple templates and render locations](#multiple-templates-and-render-locations)
+5. [List templates and item contexts](#list-templates-and-item-contexts)
+6. [Fixed-layout to-do example](#fixed-layout-to-do-example)
+
 ## Initial question
 
 **User**

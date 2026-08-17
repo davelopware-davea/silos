@@ -1,5 +1,9 @@
 # FreeRTOS uLisp task proof
 
+**Related:** [FreeWisp plan](../plan.md), the shared
+[Emscripten FreeRTOS port](../emscripten-freertos-port/README.md), and the
+[standalone uLisp evaluator](../standalone-ulisp/README.md).
+
 This target runs the pinned uLisp evaluator inside a genuine FreeRTOS task on
 the shared cooperative Emscripten fiber port. A client task sends expressions
 and receives printed results through FreeRTOS queues.

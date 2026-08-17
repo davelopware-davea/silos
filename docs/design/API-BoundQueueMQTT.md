@@ -13,6 +13,20 @@ API specification, not yet a committed SilOS interface.
 Examples use JSON-like notation where the exact uLisp representation remains
 undecided.
 
+## Contents
+
+1. [Status](#status)
+2. [Model](#model)
+3. [Topics and filters](#topics-and-filters)
+4. [Common values](#common-values)
+5. [Publishing](#publishing)
+6. [Subscribing to message streams](#subscribing-to-message-streams)
+7. [Backlog and memory](#backlog-and-memory)
+8. [Retained state binding](#retained-state-binding)
+9. [UI composition](#ui-composition)
+10. [Scheduling and ownership](#scheduling-and-ownership)
+11. [Deferred decisions](#deferred-decisions)
+
 ## Model
 
 BoundQueueMQTT exposes MQTT operations, subscriptions, and retained values

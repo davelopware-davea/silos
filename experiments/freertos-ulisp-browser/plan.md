@@ -6,6 +6,19 @@
 
 **Status:** Complete
 
+**Project context:** [SilOS plan](../../docs/design/SilOS_PLAN.md) records the
+limited project-level conclusion drawn from this completed experiment.
+
+## Contents
+
+1. [Goal](#goal)
+2. [Approach](#approach)
+3. [Sequence](#sequence)
+4. [Results](#results)
+5. [Conclusion](#conclusion)
+6. [Done when](#done-when)
+7. [Non-goals](#non-goals)
+
 ## Goal
 
 Run the real FreeRTOS kernel with uLisp in a browser, learning what can be shared with the ESP32 target.

@@ -4,6 +4,9 @@
 
 **Experiment plan:** [plan.md](plan.md)
 
+**Project context:** [SilOS plan](../../docs/design/SilOS_PLAN.md). This is a
+chronological journal; the plan above is its concise navigable summary.
+
 Short chronological notes recording what we tried, why, and what happened. Keep conclusions provisional until supported by the experiment.
 
 ## 2026-08-10 - Initial direction

@@ -1,5 +1,8 @@
 # FreeRTOS kernel proof
 
+**Related:** [FreeWisp plan](../plan.md) and the shared
+[Emscripten FreeRTOS port](../emscripten-freertos-port/README.md).
+
 This fixture builds the pinned FreeRTOS-Kernel with a cooperative Emscripten
 fiber port. Each FreeRTOS task keeps a conventional C stack. Fiber metadata and
 the Asyncify continuation stack are separate, port-owned allocations.

@@ -1,5 +1,7 @@
 # FreeWisp WebAssembly smoke test
 
+**Related:** [FreeWisp plan](../plan.md).
+
 This minimal program verifies that CMake, Ninja, Emscripten, and Node can
 configure, compile, link, and execute a WebAssembly program together.
 

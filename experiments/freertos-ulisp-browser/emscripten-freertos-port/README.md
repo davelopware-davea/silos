@@ -1,5 +1,8 @@
 # Emscripten FreeRTOS port
 
+**Related:** [FreeWisp plan](../plan.md) and
+[FreeRTOS uLisp task proof](../freertos-ulisp-task/README.md).
+
 Shared cooperative FreeRTOS port for FreeWisp targets. It maps tasks to
 Emscripten fibers, returns every yield through a central event-loop scheduler,
 and keeps Asyncify continuation storage separate from conventional task C

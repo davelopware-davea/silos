@@ -2,6 +2,37 @@
 
 > This is the detailed plan archived on 8 August 2026. It preserves earlier recommendations, options, and open questions for reference, but it is not authoritative. Consult [SilOS_PLAN.md](SilOS_PLAN.md) for current commitments and current work. Revisit material here only when its design area becomes active.
 
+**Related:** the current exploratory work is recorded in the discussion notes
+for [UiRefs and templates](Discussion-VariableBindingAndTemplates.md),
+[Shell UI](Discussion-Shell-UI.md), and
+[storage and MQTT references](Discussion-QueueMetaphors.md).
+
+## Contents
+
+1. [Introduction](#introduction)
+2. [Implementation Sequence](#1-implementation-sequence)
+3. [Proposed Initial Constraints](#2-proposed-initial-constraints)
+4. [Project Purpose and Charter](#3-project-purpose-and-charter)
+5. [Definition of “Operating System”](#4-definition-of-operating-system)
+6. [System Architecture](#5-system-architecture)
+7. [Visual Identity](#6-visual-identity)
+8. [Interaction Model](#7-interaction-model)
+9. [UI System](#8-ui-system)
+10. [Hardware and Platform Model](#9-hardware-and-platform-model)
+11. [Execution and Memory Model](#10-execution-and-memory-model)
+12. [Application Model](#11-application-model)
+13. [Shell and Core Applications](#12-shell-and-core-applications)
+14. [Persistent Storage](#13-persistent-storage)
+15. [Security and Trust](#14-security-and-trust)
+16. [Networking and Communication](#15-networking-and-communication)
+17. [Reliability and Recovery](#16-reliability-and-recovery)
+18. [Language, Build System, and Tooling](#17-language-build-system-and-tooling)
+19. [Browser Simulator](#18-browser-simulator)
+20. [Testing and Quality](#19-testing-and-quality)
+21. [Documentation and Decision Process](#20-documentation-and-decision-process)
+22. [Immediate Decisions to Work Through](#21-immediate-decisions-to-work-through)
+23. [Locked Decisions Register](#22-locked-decisions-register)
+
 ## Introduction
 
 **[LOCKED] Document purpose:** This is the living design and implementation plan for **SilOS**. Its purpose is to identify the characteristics of the system that must be defined, record the alternatives under consideration, capture recommendations, and preserve decisions once they have been agreed.

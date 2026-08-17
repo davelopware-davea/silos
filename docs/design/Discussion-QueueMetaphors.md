@@ -8,6 +8,24 @@ This note records exploratory queue-and-binding models for SilOS storage and
 MQTT networking. It is discussion material, not an agreed design or a
 replacement for the authoritative SilOS plan.
 
+**Related:** [BoundQueueStore API](API-BoundQueueStore.md) and
+[BoundQueueMQTT API](API-BoundQueueMQTT.md) collect the current API sketches.
+[Variable Binding and Templates](Discussion-VariableBindingAndTemplates.md)
+describes the UiRef and template model with which these references compose.
+
+## Contents
+
+1. [BoundQueueStore model](#boundqueuestore-model)
+2. [StoreRef shape](#storeref-shape)
+3. [Two-way synchronisation](#two-way-synchronisation)
+4. [Store and row lifecycle](#store-and-row-lifecycle)
+5. [Watching StoreRefs and rows](#watching-storerefs-and-rows)
+6. [Composition with UI binding](#composition-with-ui-binding)
+7. [Other Store API operations](#other-store-api-operations)
+8. [MQTT networking extension](#mqtt-networking-extension)
+9. [Scheduling and ownership](#scheduling-and-ownership)
+10. [Questions to explore](#questions-to-explore)
+
 ## BoundQueueStore model
 
 The proposed architecture is called the **BoundQueueStore model**. It

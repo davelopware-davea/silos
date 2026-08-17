@@ -1,6 +1,6 @@
 # Discussion: Variable Binding and Templates
 
-Conversation recorded on 13 August 2026.
+Conversation begun on 13 August 2026; updated on 17 August 2026.
 
 ## Purpose
 
@@ -9,24 +9,82 @@ the SilOS Shell and rendering them through reusable, display-independent
 templates. It is discussion material to guide the next prototype; it does not
 yet promote these details into the authoritative SilOS plan.
 
+**Related:** [Shell UI](Discussion-Shell-UI.md) applies UiRefs to focus and
+bottom-line editing. [Earlier binding discussion](Discussion-FreeRTOS-uLisp-Variable-UI-Binding.md)
+preserves the reasoning that led to this model.
+
+## Contents
+
+1. [Core model](#core-model)
+2. [UiRef value, status, and watches](#uiref-value-status-and-watches)
+3. [Task and memory ownership](#task-and-memory-ownership)
+4. [Rendering and synchronisation](#rendering-and-synchronisation)
+5. [Flow-based templates](#flow-based-templates)
+6. [Per-occurrence formatting](#per-occurrence-formatting)
+7. [Prototype questions still to answer](#prototype-questions-still-to-answer)
+
 ## Core model
 
 The design separates three concepts:
 
 1. A **uLisp variable** contains the authoritative application value in the
    uLisp workspace.
-2. A **binding** exposes that variable once to the Shell and gives it a stable
-   Shell-side identity.
+2. A **UiRef** exposes that variable once to the Shell and gives it a stable,
+   language-visible and Shell-side identity. Earlier sketches called this a
+   binding; `UiRef` distinguishes it from a template's `Binding` instruction.
 3. A **template** is an ordered list of instructions describing how literals
    and already-bound variables flow into the UI.
 
-A bound variable may appear in multiple templates, or multiple times in the
-same template. Templates refer to bindings; they do not own variables or create
-a new binding for each occurrence.
+A UiRef may appear in multiple templates, or multiple times in the same
+template. Templates refer to UiRefs; they do not own variables or create a new
+UiRef for each occurrence.
 
 ```text
-uLisp variable -> one Shell binding -> many template occurrences
+uLisp variable -> one UiRef -> many template occurrences
 ```
+
+## UiRef value, status, and watches
+
+`defui` creates the UiRef for an exposed variable. The exact Lisp-facing
+syntax remains to be designed, but the result is a stable live reference with a
+conceptual shape parallel to a StoreRef:
+
+```text
+{
+  meta: {
+    status: ready | editing | stale | error,
+    type: string | integer | ...,
+    editable: true | false,
+    revision: ...
+  },
+  value: current value of the exposed uLisp variable
+}
+```
+
+This is language semantics, not a requirement to copy the uLisp value into a
+second native object. The authoritative value remains in the uLisp variable;
+the UiRef provides its stable identity and metadata.
+
+`meta.status` describes the UI lifecycle. In particular, the Shell sets it to
+`editing` while its bottom-line editor is active for that UiRef. It changes to
+`stale` if an external update conflicts with the active edit. When editing ends,
+application code can observe the transition and carry out post-edit work. This
+status is distinct from the persistence state of a StoreRef or StoreRowRef that
+may supply the variable's value.
+
+An application can watch a UiRef, using the same live-reference convention as
+StoreRefs:
+
+```lisp
+(ui-ref-watch title-ref
+  (lambda (live old-value)
+    ...))
+```
+
+The callback receives the still-live UiRef and a bounded, non-live old-value or
+metadata snapshot. It runs in the uLisp task after the appropriate UiRef state
+change, never directly in the Shell task. A Shell-originated change is therefore
+sent to the uLisp task, which updates the UiRef and invokes watches safely.
 
 ## Task and memory ownership
 
@@ -41,10 +99,10 @@ The initial design uses separate FreeRTOS tasks for uLisp and the Shell UI:
 - Queues carry bounded commands, input, results, and completed-frame messages
   between owners. They do not carry pointers into the uLisp workspace.
 
-The binding registry associates a stable `BindingId` with a uLisp global
-variable. An entry may cache the variable's global environment binding-pair
-pointer, while templates contain only `BindingId` references. Consequently, if
-a cached pair moves, only the registry entry needs repair.
+The UiRef registry associates a stable `UiRefId` with a uLisp global variable.
+An entry may cache the variable's global environment binding-pair pointer,
+while templates contain only `UiRefId` references. Consequently, if a cached
+pair moves, only the registry entry needs repair.
 
 ## Rendering and synchronisation
 
@@ -54,8 +112,8 @@ tracking or partial rendering:
 1. The Shell UI task wakes at its selected refresh rate.
 2. It locks access to the uLisp workspace, preventing evaluation, mutation, GC,
    and compaction.
-3. It traverses the active template and follows each referenced binding pair to
-   its current value.
+3. It traverses the active template and follows each referenced UiRef's binding
+   pair to its current value.
 4. It clears and redraws the complete framebuffer.
 5. It unlocks the uLisp workspace.
 6. It sends the completed framebuffer to the platform display or Browser
@@ -89,7 +147,7 @@ within the available display area.
 The minimum instruction set is:
 
 - `Literal`: render fixed text and advance the cursor;
-- `Binding`: render the current value of an exposed variable and advance the
+- `Binding`: render the current value of a referenced UiRef and advance the
   cursor; and
 - `NewLine`: move to the beginning of the next Shell-defined line.
 
@@ -113,9 +171,8 @@ to be used on different screen sizes.
 
 ## Per-occurrence formatting
 
-Formatting belongs to a `Binding` instruction, not to the binding registry.
-The same exposed variable can therefore be clipped or formatted differently in
-each occurrence.
+Formatting belongs to a `Binding` instruction, not to the UiRef registry. The
+same UiRef can therefore be clipped or formatted differently in each occurrence.
 
 The initial representation should use a restricted C `printf`-style format
 string directly in the instruction rather than introduce format objects or
@@ -144,8 +201,8 @@ altering the variable-binding or flow-template model.
 
 The next experiment should establish:
 
-- the Lisp-facing operations for exposing and unexposing a global variable;
-- whether binding and template commands are queued to the Shell task or modify
+- the Lisp-facing operations for creating, watching, and releasing a UiRef;
+- whether UiRef and template commands are queued to the Shell task or modify
   Shell-owned structures through a short synchronised call;
 - the fixed capacities and memory cost of bindings, templates, instructions,
   literals, and format strings;

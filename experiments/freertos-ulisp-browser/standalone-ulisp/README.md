@@ -1,5 +1,8 @@
 # Standalone uLisp WebAssembly REPL
 
+**Related:** [FreeWisp plan](../plan.md) and the integrated
+[FreeRTOS uLisp task proof](../freertos-ulisp-task/README.md).
+
 This target compiles the pinned, unmodified uLisp ESP 4.9a source with a small
 Arduino compatibility layer. Hardware, filesystem, sleep, and Wi-Fi operations
 are currently inert; the real uLisp reader, evaluator, allocator, garbage

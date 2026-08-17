@@ -8,6 +8,8 @@ This is the authoritative plan for SilOS. It deliberately records only:
 
 Ideas are not commitments. Detailed alternatives and earlier recommendations are preserved in [SilOS_DESIGN_BACKLOG.md](SilOS_DESIGN_BACKLOG.md) and should be reconsidered only when relevant work begins.
 
+Current exploratory design material is kept separate: [UiRefs and templates](Discussion-VariableBindingAndTemplates.md), [Shell UI](Discussion-Shell-UI.md), and [storage and MQTT references](Discussion-QueueMetaphors.md). The completed [FreeWisp plan](../../experiments/freertos-ulisp-browser/plan.md) supplies Browser-substrate evidence.
+
 ## Contents
 
 1. [Purpose](#1-purpose)
