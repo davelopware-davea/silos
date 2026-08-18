@@ -1,0 +1,208 @@
+# Shell API
+
+Draft recorded on 18 August 2026.
+
+## Status
+
+This document collects the current proposed boundary between the SilOS Shell,
+uLisp applications, and the native runtime. It summarises [uLisp Applications
+and the Shell](Discussion-uLisp-Applications-and-Shell.md) and [Shell
+UI](Discussion-Shell-UI.md). It is a working API sketch, not a committed SilOS
+interface.
+
+The companion [BoundQueueStore](API-BoundQueueStore.md) and
+[BoundQueueMQTT](API-BoundQueueMQTT.md) APIs define the live Refs through
+which an app normally receives storage and network changes.
+
+## Contents
+
+1. [Model](#model)
+2. [App index and declaration source](#app-index-and-declaration-source)
+3. [`app-declare`](#app-declare)
+4. [Loading and starting an app](#loading-and-starting-an-app)
+5. [Events, handlers, and Refs](#events-handlers-and-refs)
+6. [Reload](#reload)
+7. [Shared and private source modules](#shared-and-private-source-modules)
+8. [Ownership and memory](#ownership-and-memory)
+9. [Deferred decisions](#deferred-decisions)
+
+## Model
+
+The Shell and its UI task are native code. They own the display, input
+normalisation, app catalogue, layout, and Shell-owned descriptor/template
+storage. The uLisp task owns evaluation, the uLisp workspace, application
+closures, Refs, and watch invocation. Queues carry only bounded messages and
+plain descriptors across that boundary.
+
+The first prototype uses one active uLisp application. A later dispatcher may
+retain several app instances in one workspace, but they do not execute
+concurrently.
+
+```text
+Shell UI task <-> bounded commands/events <-> uLisp task
+      owns display                         owns Lisp state and handlers
+```
+
+## App index and declaration source
+
+The Shell needs a small known app index. Initially it may be compiled into the
+platform artifact; later it may be a persisted system store. An index entry
+contains a stable app ID and the logical store name for that app's declaration
+source:
+
+```text
+todo -> apps/todo/app.lisp
+```
+
+The declaration source is separate from executable source modules:
+
+```text
+apps/todo/app.lisp       app characteristics and entry-store ID
+apps/todo/src/main       executable entry source
+apps/todo/src/model      app-private source module
+```
+
+These are logical store names. A FAT backend may map them to files; IndexedDB
+or SRAM may not. The Shell does not infer apps by scanning arbitrary stores.
+
+To catalogue an app, the Shell asks the uLisp task to read only `app.lisp` in a
+restricted **describe** mode. Describe mode permits one `app-declare` form with
+literal bounded values. It rejects `require`, `import`, `defun`, and ordinary
+application side effects. Thus the Shell learns presentation requirements
+without loading executable code.
+
+## `app-declare`
+
+```lisp
+(app-declare
+  :name "To-do"
+  :ideal-width 24
+  :ideal-height 10
+  :entry "apps/todo/src/main")
+```
+
+`app-declare` is a native uLisp primitive. During describe mode it validates
+the declaration and emits a fixed-size native descriptor associated with the
+current index app ID:
+
+```text
+{
+  id: "todo",
+  name: "To-do",
+  ideal_width: 24,
+  ideal_height: 10,
+  entry: "apps/todo/src/main"
+}
+```
+
+The Shell owns this descriptor. It does not look up a common Lisp function,
+retain a Lisp pointer, or load the entry source merely to show the app. Field
+limits and the exact layout values remain for the prototype to establish.
+
+## Loading and starting an app
+
+When the user starts an app, the Shell sends its app ID and entry-store ID to
+the uLisp task. The task clears/prepares the active app workspace, streams the
+entry store through the uLisp reader using a bounded input buffer, and evaluates
+it.
+
+The entry source initialises state and finishes by registering an app instance:
+
+```lisp
+(app-start
+  (lambda (event)
+    ;; Handle one bounded event and return.
+    event))
+```
+
+`app-start` associates the closure with the current app ID and retains it as a
+uLisp GC root. This is a working proposal; the exact event value and callback
+registration form remain open. The entry must return after setup; it must not
+take ownership of the uLisp task with a permanent `(loop ...)`.
+
+## Events, handlers, and Refs
+
+The uLisp task is the event loop. The Shell, storage, MQTT, and timing services
+send bounded events. Each event identifies an app where relevant. The task
+invokes that app's handler or updates a live Ref and runs its watches. Each
+handler/watch performs bounded work and returns.
+
+```text
+Shell input / storage / MQTT / timer
+  -> event or Ref update in uLisp task
+  -> short app handler or watch
+  -> next queued event
+```
+
+StoreRefs, StoreRowRefs, UiRefs, and later MQTT Refs provide the normal
+reactive work items. A change may enqueue more work, but must not create an
+unbounded synchronous watch chain. A FreeRTOS yield cannot switch to another
+app handler inside the same uLisp task, so multi-app fairness begins with short
+handlers and a bounded event queue.
+
+## Reload
+
+Persistent source and the loaded uLisp program are independent. Editing source
+does not alter the current workspace. Shell **Reload app** is the explicit
+boundary:
+
+1. wait for writes to the app's source store, or reject Reload as busy;
+2. stop the app and release its Shell templates, UiRefs, StoreRefs, watches,
+   subscriptions, and rooted callbacks;
+3. clear/recreate the uLisp workspace and module state; and
+4. stream and evaluate the current entry source and its dependencies.
+
+The smallest path does not retain the old running app while trying the new one.
+A source/load failure enters a small native recovery Shell that reports the
+error and can return to an editor. Rollback needs additional workspace or image
+memory and is deferred.
+
+## Shared and private source modules
+
+Native SilOS primitives are registered in uLisp's built-in table at the C/C++
+build. uLisp is interpreted, so application source does not import C headers or
+compile against C signatures. It calls built-in names directly; uLisp checks
+builtin arity at runtime.
+
+Two provisional source-loading forms have distinct roles:
+
+```lisp
+(require 'silos-store)               ; shared system API module
+(import "apps/todo/src/model")       ; app-private source module
+```
+
+`require` loads a shared system library once into deliberately global API
+names. It uses a bounded module catalogue mapping library names to stores, and
+must detect cycles and avoid repeat loads.
+
+`import` is a proposed native primitive for app-private source. Its store
+evaluates to a factory closure or bounded export value instead of top-level
+global `defun` definitions. The entry keeps that value in a lexical binding,
+so separate apps may use the same helper names without collision. The runtime
+may cache one factory per store ID, but each app instantiates private state
+separately.
+
+## Ownership and memory
+
+- The Shell UI task never traverses or retains pointers into the uLisp heap.
+- The uLisp task alone evaluates Lisp, updates Refs, invokes watches, and calls
+  application closures.
+- Native registries retaining a uLisp binding or closure must be visible to
+  garbage collection and removed on app reload.
+- Source is streamed from storage with a bounded reader buffer; it is not kept
+  in a second native source copy.
+- One workspace has no user-defined namespaces. App-private functions and
+  state use lexical closures; native builtins and shared system API names are
+  reserved globals.
+
+## Deferred decisions
+
+- descriptor fields, sizes, and validation rules;
+- app-index representation, update, corruption recovery, and capacity;
+- restricted declaration-reader implementation and error reporting;
+- exact event vocabulary, handler registration, ordering, and fairness;
+- lifecycle states, stop/close policy, and release/cancellation APIs;
+- source-editor, module-factory, lexical-export, and import-error semantics;
+- long-running/background work and whether it needs continuations or separate
+  uLisp workspaces; and
+- package/namespace support if closure-based isolation becomes insufficient.

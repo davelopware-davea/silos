@@ -150,6 +150,16 @@ The first prototype may omit polish, general-purpose APIs, dynamic application l
 
 The current prototype direction is summarised in [Discussion: Variable Binding and Templates](Discussion-VariableBindingAndTemplates.md). It separates exposing a uLisp variable once from rendering that binding any number of times through reusable, screen-independent flow templates. A Shell UI task owns template interpretation and the framebuffer and initially redraws the complete active template on every refresh. These details remain hypotheses to test rather than settled architecture.
 
+### Immediate next step
+
+Build a Browser-first minimal to-do application in real uLisp. Use one active
+application and the smallest proposed Shell boundary: app declaration, loading,
+UiRefs/templates, Shell semantic input, and StoreRef-backed to-do rows. The
+purpose is to expose where the proposed Shell, source-loading, handler, Ref,
+and storage APIs need refinement when expressed as actual uLisp code. This is
+an experiment within the current milestone, not adoption of the API sketches
+as final interfaces.
+
 ### Provisional Browser substrate
 
 The completed [FreeWisp spike](../../experiments/freertos-ulisp-browser/plan.md) demonstrated that the real FreeRTOS kernel and uLisp evaluator can run together in browser WebAssembly using cooperative Emscripten fibers. The runtime operated in a dedicated Web Worker, communicated through FreeRTOS queues and Worker messages, yielded during long evaluations, and drove a 128x64 framebuffer from Lisp without freezing the page.
