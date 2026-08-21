@@ -9,8 +9,8 @@
 
 #include <emscripten.h>
 
-#include "BootSeed.h"
 #include "InMemoryStoreBackend.h"
+#include "StoreInitLoader.h"
 #include "FreeRTOS.h"
 #include "queue.h"
 #include "task.h"
@@ -25,8 +25,6 @@ WiFiClass WiFi;
 
 namespace {
 constexpr std::size_t StoreNameCapacity = InMemoryStoreNameCapacity;
-constexpr std::size_t ExpressionCapacity = 128;
-constexpr std::size_t OutputCapacity = 256;
 constexpr configSTACK_DEPTH_TYPE ULispTaskStackBytes = 65536U;
 constexpr configSTACK_DEPTH_TYPE ClientTaskStackBytes = 32768U;
 
@@ -38,8 +36,6 @@ struct AppDeclaration {
   bool present = false;
 };
 
-struct EvalRequest { char expression[ExpressionCapacity]; };
-struct EvalResponse { char output[OutputCapacity]; };
 enum class StorageRequestKind { BindStore };
 struct StorageRequest {
   StorageRequestKind kind;
@@ -53,8 +49,6 @@ struct StorageCompletion {
 InMemoryStoreBackend SourceStores;
 AppDeclaration CurrentDeclaration;
 bool AppStarted = false;
-QueueHandle_t RequestQueue;
-QueueHandle_t ResponseQueue;
 QueueHandle_t StorageRequestQueue;
 QueueHandle_t StorageCompletionQueue;
 QueueHandle_t BindReadyQueue;
@@ -62,12 +56,17 @@ const InMemoryStore *CurrentSource = nullptr;
 std::size_t CurrentRow = 0;
 std::size_t CurrentCharacter = 0;
 bool SourceAtEnd = false;
-const char *ExpressionCursor = nullptr;
-char CapturedOutput[OutputCapacity];
-std::size_t CapturedOutputLength = 0;
-bool CapturingOutput = false;
 bool StoreBindStartedPending = false;
 bool StoreBindCompletedReady = false;
+bool StoreRefWatchRegistered = false;
+bool StoreRefWatchOldSnapshotCreated = false;
+int StoreRefWatchInvocationCount = 0;
+int StoreRefWatchObservationCount = 0;
+bool StoreRefWatchObservedReady = false;
+bool StoreRefWatchObservedCount = false;
+bool StoreRefWatchObservedOldPending = false;
+bool StoreRefWatchObservedOldValueNil = false;
+char StoreRefWatchObservedDescription[InMemoryFieldValueCapacity]{};
 
 
 bool has_prefix(const char *text, const char *prefix) {
@@ -83,10 +82,6 @@ bool is_app_manifest_name(const char *name) {
   const char *app_name = name + std::strlen(Prefix);
   const char *slash = std::strchr(app_name, '/');
   return slash != app_name && slash != nullptr && std::strcmp(slash, Suffix) == 0;
-}
-
-void copy_request(EvalRequest &request, const char *expression) {
-  std::snprintf(request.expression, sizeof(request.expression), "%s", expression);
 }
 
 }
@@ -105,11 +100,7 @@ void silos_capture_app_declaration(const char *name, int ideal_width,
 void silos_record_app_start() { AppStarted = true; }
 
 void silos_serial_write(char value) {
-  if (!CapturingOutput) {
-    std::putchar(static_cast<unsigned char>(value));
-    return;
-  }
-  if (CapturedOutputLength + 1 < sizeof(CapturedOutput)) CapturedOutput[CapturedOutputLength++] = value;
+  std::putchar(static_cast<unsigned char>(value));
 }
 
 // The copied Browser compatibility header still uses FreeWisp's original
@@ -144,24 +135,22 @@ int read_source_character() {
     const InMemoryStoreField *text =
         SourceStores.find_field(CurrentSource->rows[CurrentRow], "text");
     // The source loader asks for a named field just like any other store
-    // consumer.  A malformed source row is an assertion in this boot-only
-    // seed, not a second source-specific representation in the backend.
-    configASSERT(text != nullptr && text->value != nullptr);
+    // consumer. A malformed source row is an assertion in this bounded
+    // startup import, not a second source-specific representation in backend.
+    configASSERT(text != nullptr);
     const char *row = text->value;
     const char character = row[CurrentCharacter++];
     if (character != '\0') return static_cast<unsigned char>(character);
     ++CurrentRow;
     CurrentCharacter = 0;
+    // A generic source row does not retain its input-file newline. Re-emit one
+    // boundary here so ordinary ';' comments end before the next stored row.
     return '\n';
   }
   SourceAtEnd = true;
   return -1;
 }
 
-int read_expression_character() {
-  if (ExpressionCursor == nullptr || *ExpressionCursor == '\0') return -1;
-  return static_cast<unsigned char>(*ExpressionCursor++);
-}
 }
 
 #include "ulisp-generated.inc"
@@ -182,12 +171,25 @@ void complete_store_bind(const StorageCompletion &completion) {
   object *status = silos_find_field(cdr(metadata), "status");
   configASSERT(status != nil);
 
+  // This is a separate, non-live record allocated while the bound ref is
+  // still pending. It remains protected while constructing the ready rows and
+  // while its watch runs, so the callback can compare old and live state.
+  object *old_snapshot = silos_snapshot_store_ref(SilosBoundStoreRef);
+  protect(old_snapshot);
+  StoreRefWatchOldSnapshotCreated = true;
+
   cdr(value) = silos_make_store_row_refs(*store, SilosBoundFieldNames,
                                           SilosBoundFieldCount, SilosBoundStart,
                                           SilosBoundCount);
   cdr(status) = silos_symbol("ready");
+  configASSERT(SilosBoundStoreWatch != NULL);
+  object *watch_arguments = cons(SilosBoundStoreRef, cons(old_snapshot, nil));
+  (void)apply(SilosBoundStoreWatch, watch_arguments, nullptr);
+  ++StoreRefWatchInvocationCount;
+  unprotect();
   StoreBindCompletedReady = true;
-  std::printf("store-bind=%s status=ready\n", completion.store_name);
+  std::printf("store-bind=%s status=ready watch=%d\n", completion.store_name,
+              StoreRefWatchInvocationCount);
   const bool ready = true;
   configASSERT(xQueueSend(BindReadyQueue, &ready, portMAX_DELAY) == pdPASS);
 }
@@ -233,31 +235,6 @@ bool evaluate_source_store(const InMemoryStore &store) {
   }
 }
 
-bool evaluate_expression(const char *expression, char output[OutputCapacity]) {
-  CurrentSource = nullptr;
-  ExpressionCursor = expression;
-  CapturedOutputLength = 0;
-  CapturingOutput = true;
-  bool succeeded = true;
-
-  if (setjmp(toplevel_handler)) {
-    ulisperror();
-    succeeded = false;
-  } else {
-    object *form = readmain(read_expression_character);
-    protect(form);
-    object *result = eval(form, nullptr);
-    printobject(result, pserial);
-    unprotect();
-    pln(pserial);
-  }
-
-  CapturedOutput[CapturedOutputLength] = '\0';
-  std::snprintf(output, OutputCapacity, "%s", CapturedOutput);
-  CapturingOutput = false;
-  return succeeded;
-}
-
 bool bootstrap_apps() {
   bool found_manifest = false;
   bool loaded = true;
@@ -282,27 +259,10 @@ void ulisp_task(void *) {
   configASSERT(booted);
   for (;;) {
     process_storage_completions();
-    EvalRequest request{};
-    EvalResponse response{};
     // One whole tick gives the cooperative Browser scheduler a yield point.
     // pdMS_TO_TICKS(1) rounds down to zero at this target's 100 Hz tick rate.
-    if (xQueueReceive(RequestQueue, &request, 1) == pdPASS) {
-      (void)evaluate_expression(request.expression, response.output);
-      configASSERT(xQueueSend(ResponseQueue, &response, portMAX_DELAY) == pdPASS);
-    }
+    vTaskDelay(1);
   }
-}
-
-bool expect_evaluation(const char *expression, const char *expected_output) {
-  EvalRequest request{};
-  EvalResponse response{};
-  copy_request(request, expression);
-  configASSERT(xQueueSend(RequestQueue, &request, portMAX_DELAY) == pdPASS);
-  configASSERT(xQueueReceive(ResponseQueue, &response, portMAX_DELAY) == pdPASS);
-  const bool matches = std::strcmp(response.output, expected_output) == 0;
-  std::printf("eval=%s result=%s match=%s", expression, response.output,
-              matches ? "yes\n" : "no\n");
-  return matches;
 }
 
 void client_task(void *) {
@@ -310,11 +270,22 @@ void client_task(void *) {
   // duration. This makes the pending-to-ready proof deterministic.
   bool bind_ready = false;
   configASSERT(xQueueReceive(BindReadyQueue, &bind_ready, portMAX_DELAY) == pdPASS);
-  bool passed = bind_ready && StoreBindStartedPending && StoreBindCompletedReady;
-  passed = expect_evaluation("(silos-test-event 'binding-status)", "ready\r\n") && passed;
-  passed = expect_evaluation("(silos-test-event 'count)", "2\r\n") && passed;
-  passed = expect_evaluation("(silos-test-event 'sample-description)",
-                             "\"Learn how SilOS loads Lisp from a store\"\r\n") && passed;
+  const bool observed_description = std::strcmp(
+      StoreRefWatchObservedDescription,
+      "Learn how SilOS loads Lisp from a store") == 0;
+  const bool passed = bind_ready && StoreBindStartedPending &&
+                      StoreBindCompletedReady && StoreRefWatchRegistered &&
+                      StoreRefWatchOldSnapshotCreated &&
+                      StoreRefWatchInvocationCount == 1 &&
+                      StoreRefWatchObservationCount == 1 &&
+                      StoreRefWatchObservedReady && StoreRefWatchObservedCount &&
+                      observed_description && StoreRefWatchObservedOldPending &&
+                      StoreRefWatchObservedOldValueNil;
+  std::printf("store-ref-watch fired=%d ready=%s count=%s old=pending/%s\n",
+              StoreRefWatchInvocationCount,
+              StoreRefWatchObservedReady ? "yes" : "no",
+              StoreRefWatchObservedCount ? "yes" : "no",
+              StoreRefWatchObservedOldValueNil ? "nil" : "not-nil");
   std::puts(passed ? "SILOS_TODO_BOOT_PASS" : "SILOS_TODO_BOOT_FAIL");
   if (!passed) std::abort();
   vTaskEndScheduler();
@@ -331,14 +302,17 @@ extern "C" void vApplicationMallocFailedHook() { vSilOSAssert("FreeRTOS heap exh
 extern "C" void vApplicationIdleHook() { vPortWaitForTick(); }
 
 int main() {
-  configASSERT(seed_boot_stores(SourceStores));
-  RequestQueue = xQueueCreate(1, sizeof(EvalRequest));
-  ResponseQueue = xQueueCreate(1, sizeof(EvalResponse));
+  StoreInitLoadResult store_init{};
+  // Emscripten preloads runtime/store-init at /store-init before MAIN runs.
+  // The importer traverses that virtual directory, so the startup proof reads
+  // the versioned files rather than any compiled C++ source constants.
+  configASSERT(load_store_init("/store-init", SourceStores, store_init));
+  std::printf("store-init stores=%zu source-rows=%zu csv-rows=%zu\n",
+              store_init.store_count, store_init.source_row_count,
+              store_init.csv_row_count);
   StorageRequestQueue = xQueueCreate(1, sizeof(StorageRequest));
   StorageCompletionQueue = xQueueCreate(1, sizeof(StorageCompletion));
   BindReadyQueue = xQueueCreate(1, sizeof(bool));
-  configASSERT(RequestQueue != nullptr);
-  configASSERT(ResponseQueue != nullptr);
   configASSERT(StorageRequestQueue != nullptr);
   configASSERT(StorageCompletionQueue != nullptr);
   configASSERT(BindReadyQueue != nullptr);

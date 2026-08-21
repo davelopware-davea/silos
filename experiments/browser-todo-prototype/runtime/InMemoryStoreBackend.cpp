@@ -5,8 +5,8 @@
 
 namespace {
 bool copy_bounded_string(char destination[], std::size_t destination_capacity,
-                         const char *source) {
-  if (source == nullptr || source[0] == '\0' ||
+                         const char *source, bool require_nonempty) {
+  if (source == nullptr || (require_nonempty && source[0] == '\0') ||
       std::strlen(source) >= destination_capacity) {
     return false;
   }
@@ -19,7 +19,7 @@ bool InMemoryStoreBackend::create_store(const char *name) {
   if (count_ == InMemoryStoreCapacity || get(name) != nullptr) return false;
 
   InMemoryStore &store = stores_[count_];
-  if (!copy_bounded_string(store.name, sizeof(store.name), name)) return false;
+  if (!copy_bounded_string(store.name, sizeof(store.name), name, true)) return false;
   ++count_;
   return true;
 }
@@ -43,7 +43,10 @@ bool InMemoryStoreBackend::append_row(const char *store_name, std::uint32_t id,
     if (fields[index].value == nullptr ||
         !copy_bounded_string(candidate.fields[index].name,
                              sizeof(candidate.fields[index].name),
-                             fields[index].name)) {
+                             fields[index].name, true) ||
+        !copy_bounded_string(candidate.fields[index].value,
+                             sizeof(candidate.fields[index].value),
+                             fields[index].value, false)) {
       return false;
     }
     for (std::size_t earlier = 0; earlier < index; ++earlier) {
@@ -52,7 +55,6 @@ bool InMemoryStoreBackend::append_row(const char *store_name, std::uint32_t id,
         return false;
       }
     }
-    candidate.fields[index].value = fields[index].value;
   }
 
   // Only publish a completely validated row, so a rejected seed cannot leave

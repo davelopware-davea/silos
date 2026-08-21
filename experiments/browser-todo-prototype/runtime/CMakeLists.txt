@@ -10,6 +10,11 @@ set(FREERTOS_KERNEL "${CMAKE_CURRENT_SOURCE_DIR}/../third-party/FreeRTOS-Kernel"
 set(FREERTOS_EMSCRIPTEN_PORT "${CMAKE_CURRENT_SOURCE_DIR}/../../freertos-ulisp-browser/emscripten-freertos-port")
 set(ULISP_COMPAT "${CMAKE_CURRENT_SOURCE_DIR}/../../freertos-ulisp-browser/standalone-ulisp/compat")
 set(ULISP_UPSTREAM "${CMAKE_CURRENT_SOURCE_DIR}/../third-party/ulisp-esp/ulisp-esp.ino")
+# Link dependencies make edits below store-init rebuild Emscripten's preloaded
+# virtual-filesystem data, rather than leaving a stale browser artifact.
+file(GLOB_RECURSE STORE_INIT_FILES CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/store-init/*"
+)
 
 # Arduino normally inserts forward declarations while preprocessing a sketch.
 # Generate those declarations in an adapter, keeping the vendored uLisp source
@@ -42,6 +47,7 @@ set(SILOS_APP_EXTENSION [[
 const char doc_appdeclare[] = "(app-declare :name string :ideal-width integer :ideal-height integer :entry string)\nRegisters the current app declaration during bootstrap.";
 const char doc_appstart[] = "(app-start handler)\nRegisters the current app event handler.";
 const char doc_storebind[] = "(store-bind name fields start count)\nReturns a live StoreRef whose rows become ready asynchronously.";
+const char doc_storerefwatch[] = "(store-ref-watch store-ref handler)\nCalls handler with live and old StoreRef values after a top-level ref change.";
 const char doc_field[] = "(field record name)\nReads one named field from a StoreRef, StoreRowRef, or its metadata/value record.";
 
 // The initial bootstrap deliberately trusts its one manifest.  It reads the
@@ -65,6 +71,7 @@ object *fn_appdeclare (object *args, object *env) {
 
 object *SilosActiveHandler = NULL;
 object *SilosBoundStoreRef = NULL;
+object *SilosBoundStoreWatch = NULL;
 char SilosBoundStoreName[StoreNameCapacity]{};
 char SilosBoundFieldNames[InMemoryFieldsPerRowCapacity][InMemoryFieldNameCapacity]{};
 std::size_t SilosBoundFieldCount = 0;
@@ -166,6 +173,39 @@ object *silos_make_pending_bind_ref () {
   unprotect();
   unprotect();
   return ref;
+}
+
+// The only transition in this increment is PENDING to READY, so VALUE is NIL
+// when this snapshot is taken. Build fresh association-list cells nonetheless:
+// OLD-VALUE must not be another name for the StoreRef that will be mutated.
+object *silos_snapshot_store_ref (object *live_ref) {
+  object *value_entry = silos_find_field(live_ref, "value");
+  object *metadata_entry = silos_find_field(live_ref, "meta");
+  if (value_entry == nil || metadata_entry == nil) error2("invalid StoreRef");
+  object *operation_entry = silos_find_field(cdr(metadata_entry), "operation");
+  object *status_entry = silos_find_field(cdr(metadata_entry), "status");
+  object *error_entry = silos_find_field(cdr(metadata_entry), "error");
+  if (operation_entry == nil || status_entry == nil || error_entry == nil) {
+    error2("invalid StoreRef metadata");
+  }
+
+  object *metadata = nil;
+  metadata = silos_prepend_field("error", cdr(error_entry), metadata);
+  protect(metadata);
+  metadata = silos_prepend_field("status", cdr(status_entry), metadata);
+  unprotect();
+  protect(metadata);
+  metadata = silos_prepend_field("operation", cdr(operation_entry), metadata);
+  unprotect();
+
+  protect(metadata);
+  object *snapshot = nil;
+  snapshot = silos_prepend_field("value", cdr(value_entry), snapshot);
+  protect(snapshot);
+  snapshot = silos_prepend_field("meta", metadata, snapshot);
+  unprotect();
+  unprotect();
+  return snapshot;
 }
 
 object *silos_make_store_row_ref (const InMemoryStoreRow &row,
@@ -278,6 +318,17 @@ object *fn_storebind (object *args, object *env) {
   return SilosBoundStoreRef;
 }
 
+object *fn_storerefwatch (object *args, object *env) {
+  (void) env;
+  if (first(args) != SilosBoundStoreRef) error2("unknown StoreRef");
+  if (SilosBoundStoreWatch != NULL) error2("StoreRef already has a watch");
+  // The callback remains rooted until the future app-stop/reload lifecycle
+  // releases it. This one-watch lifetime is deliberately the current limit.
+  SilosBoundStoreWatch = second(args);
+  StoreRefWatchRegistered = true;
+  return tee;
+}
+
 object *fn_appstart (object *args, object *env) {
   (void) env;
   SilosActiveHandler = first(args);
@@ -285,17 +336,32 @@ object *fn_appstart (object *args, object *env) {
   return tee;
 }
 
-// This is a bootstrap test hook, not a proposed public Shell API.  It proves
-// that APP-START retained the app's closure and that events execute on the
-// uLisp task through the normal evaluation queue.
-object *fn_silostestevent (object *args, object *env) {
-  if (SilosActiveHandler == NULL) error2("no active app handler");
-  return apply(SilosActiveHandler, args, env);
+// This is a test-only observation sink, not a proposed Store or Shell API.
+// The Lisp watch has already read LIVE and OLD-VALUE; this hook just records
+// that bounded proof data for the native CTest client without invoking the
+// app-level handler.
+object *fn_silostestwatchobservation (object *args, object *env) {
+  (void) env;
+  object *old_status = first(cdr(cdr(cdr(args))));
+  object *old_value = first(cdr(cdr(cdr(cdr(args)))));
+  if (!silos_symbol_is(first(args), "ready") || checkinteger(second(args)) != 2 ||
+      !silos_symbol_is(old_status, "pending") || old_value != nil) {
+    error2("unexpected StoreRef watch observation");
+  }
+  cstring(checkstring(third(args)), StoreRefWatchObservedDescription,
+          sizeof(StoreRefWatchObservedDescription));
+  ++StoreRefWatchObservationCount;
+  StoreRefWatchObservedReady = true;
+  StoreRefWatchObservedCount = true;
+  StoreRefWatchObservedOldPending = true;
+  StoreRefWatchObservedOldValueNil = true;
+  return tee;
 }
 
 void silos_mark_roots () {
   markobject(SilosActiveHandler);
   markobject(SilosBoundStoreRef);
+  markobject(SilosBoundStoreWatch);
 }
 
 ]])
@@ -307,7 +373,7 @@ string(REPLACE
 )
 string(REPLACE
   "  { \":output\", (fn_ptr_type)OUTPUT, PINMODE, NULL },\n};"
-  "  { \":output\", (fn_ptr_type)OUTPUT, PINMODE, NULL },\n  { \"app-declare\", fn_appdeclare, 0207, doc_appdeclare },\n  { \"app-start\", fn_appstart, 0211, doc_appstart },\n  { \"field\", fn_field, 0222, doc_field },\n  { \"store-bind\", fn_storebind, 0244, doc_storebind },\n  { \"silos-test-event\", fn_silostestevent, 0211, NULL },\n};"
+  "  { \":output\", (fn_ptr_type)OUTPUT, PINMODE, NULL },\n  { \"app-declare\", fn_appdeclare, 0207, doc_appdeclare },\n  { \"app-start\", fn_appstart, 0211, doc_appstart },\n  { \"field\", fn_field, 0222, doc_field },\n  { \"store-bind\", fn_storebind, 0244, doc_storebind },\n  { \"store-ref-watch\", fn_storerefwatch, 0222, doc_storerefwatch },\n  { \"silos-test-watch-observation\", fn_silostestwatchobservation, 0255, NULL },\n};"
   ULISP_GENERATED_SOURCE
   "${ULISP_GENERATED_SOURCE}"
 )
@@ -316,7 +382,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/ulisp-generated.inc" "${ULISP_GENERATED_
 add_executable(silos_todo_boot
   main.cpp
   InMemoryStoreBackend.cpp
-  BootSeed.cpp
+  StoreInitLoader.cpp
   "${FREERTOS_EMSCRIPTEN_PORT}/port.c"
   "${FREERTOS_KERNEL}/list.c"
   "${FREERTOS_KERNEL}/queue.c"
@@ -343,7 +409,10 @@ target_link_options(silos_todo_boot PRIVATE
   "-sASYNCIFY=1"
   "-sALLOW_MEMORY_GROWTH=1"
   "-sASSERTIONS=1"
+  "--preload-file"
+  "${CMAKE_CURRENT_SOURCE_DIR}/store-init@/store-init"
 )
+set_property(TARGET silos_todo_boot APPEND PROPERTY LINK_DEPENDS "${STORE_INIT_FILES}")
 set_target_properties(silos_todo_boot PROPERTIES OUTPUT_NAME "silos-todo-boot" SUFFIX ".js")
 
 enable_testing()

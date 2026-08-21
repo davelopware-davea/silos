@@ -28,12 +28,13 @@ and delete to-do items, and persists those items across restart.
 2. **[done]** Re-establish the smallest proven Browser runtime boundary from
    FreeWisp, preserving a clear separation between upstream code and
    experiment code.
-3. **[done]** Seed an in-memory source backend at boot, discover the one
-   `apps/<app-name>/app.lisp` manifest, evaluate its `app-declare`, then load
-   and start the declared uLisp to-do entry source.
+3. **[done]** Import versioned startup stores into an in-memory backend at
+   Browser boot, discover the one `apps/<app-name>/app.lisp` manifest,
+   evaluate its `app-declare`, then load and start the declared uLisp to-do
+   entry source.
 4. **[done]** Implement a read-only StoreRef-backed to-do data path using the
-   same volatile in-memory backend: pending-to-ready bind completion, row
-   metadata, and field reads.
+   same volatile in-memory backend: pending-to-ready bind completion, bounded
+   old snapshots, row metadata, field reads, and one StoreRef watch.
 5. Implement the smallest useful Shell boundary: templates/UiRefs, semantic
    input dispatch, and handlers.
 6. Add create, edit, delete, and restart
@@ -43,11 +44,17 @@ and delete to-do items, and persists those items across restart.
 
 ## Current bootstrap subset
 
-- The native bootstrap seeds one volatile, fixed-capacity generic catalogue.
-  Every store has generic rows with stable ID/revision metadata and bounded
-  named string fields: source rows use `text`; to-do rows use `desc` and
-  `status`. This is an experiment-owned in-memory representation, not a
-  commitment to the final store layout.
+- Browser startup preloads and traverses `runtime/store-init/` as `/store-init`.
+  The exact relative filename, including extension, is the store name:
+  `apps/todo/app.lisp`, `apps/todo/src/main.lisp`, and `todo/items.csv` today.
+  Each `.lisp` line becomes an ordered `text` row; a `.csv` header names the
+  row fields and each data row receives sequential ID/revision `1` metadata.
+  The source reader restores a newline at every `text` row boundary, allowing
+  ordinary `;` Lisp comments in the versioned files.
+- The imported volatile catalogue is fixed-capacity and generic. Every store
+  has rows with stable ID/revision metadata and bounded named string fields;
+  its backend does not encode source or to-do row shapes. It is an
+  experiment-owned representation, not a commitment to the final store layout.
 - It temporarily discovers only exact manifest names shaped
   `apps/<app-name>/app.lisp`. This is a one-app bootstrap shortcut, not the
   future catalogue design.
@@ -59,9 +66,15 @@ and delete to-do items, and persists those items across restart.
 - Source rows retain their insertion order only for this proof. Editable
   source will need the later row-ID/next-row linked ordering model, including
   a persisted head reference.
-- The app binds the volatile `todo/items` row store with documented
+- The app binds the volatile `todo/items.csv` row store with documented
   `store-bind`; it sees an immediate pending StoreRef and then live
   StoreRowRefs after a bounded storage completion reaches the uLisp task.
+- The app uses documented `store-ref-watch` for that StoreRef's state change.
+  The uLisp task snapshots the old pending/nil ref before updating it to ready,
+  then invokes the watch once with `(live old-value)`. `app-start` remains a
+  separate, unused-in-this-proof app-level handler for future Shell events.
+  This increment permits one rooted StoreRef watch for the active app; watch
+  removal and release on app stop/reload are still deferred.
 - This increment supports only `desc` and `status` field reads. It deliberately
   excludes row record literals, creation, updates, deletion, ordering, UI, and
   persistence.

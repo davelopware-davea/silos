@@ -11,10 +11,11 @@ constexpr std::size_t InMemoryStoreCapacity = 8;
 constexpr std::size_t InMemoryRowsPerStoreCapacity = 40;
 constexpr std::size_t InMemoryFieldsPerRowCapacity = 4;
 constexpr std::size_t InMemoryFieldNameCapacity = 16;
+constexpr std::size_t InMemoryFieldValueCapacity = 256;
 
 // A field is application data, not backend metadata.  The backend does not
 // reserve names such as "text", "desc", or "status"; those names belong to
-// the store rows supplied by the boot seed (and, later, by store writes).
+// the store rows supplied by the startup importer (and, later, by writes).
 struct InMemoryStoreFieldInput {
   const char *name;
   const char *value;
@@ -22,7 +23,7 @@ struct InMemoryStoreFieldInput {
 
 struct InMemoryStoreField {
   char name[InMemoryFieldNameCapacity]{};
-  const char *value = nullptr;
+  char value[InMemoryFieldValueCapacity]{};
 };
 
 // Every row has stable system metadata plus a bounded list of named string

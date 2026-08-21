@@ -152,3 +152,113 @@ in-memory store representation, without the backend encoding either row shape?
 
 What schema-ordered Lisp record literal should `store-row-add` accept before
 the next phase adds row creation?
+
+## 2026-08-21 - Semicolon comments in streamed source rows
+
+### Question
+
+Can the versioned Lisp sources use normal semicolon comments while being
+streamed from generic `text` rows, rather than relying on block comments?
+
+### Method
+
+- Replaced the versioned app manifest and entry-source `#| ... |#` comments
+  with equally detailed `;` line comments.
+- Made the source-reader contract explicit: after consuming each imported
+  `text` row it emits one newline character before starting the next row. The
+  importer stores line text without its original delimiter, so this boundary
+  is necessary for the uLisp reader to terminate a semicolon comment.
+
+### Observed result
+
+- CTest loaded and evaluated the semicolon-commented manifest and entry store,
+  then completed the StoreRef watch proof successfully. This identifies the
+  earlier malformed-list observation as a streamed-row delimiter issue, not a
+  requirement to use block-comment syntax.
+- No FreeRTOS or uLisp vendor file changed.
+
+### Next question
+
+What schema-ordered Lisp record literal should `store-row-add` accept before
+the next phase adds row creation?
+
+## 2026-08-21 - Read-only StoreRef watch
+
+### Question
+
+Can the loaded app observe its bound StoreRef through the documented
+`store-ref-watch` callback, rather than treating its app-level handler as a
+storage notification mechanism?
+
+### Method
+
+- Added `store-ref-watch` with the documented `(store-ref handler)` shape. Its
+  callback is a native GC root alongside the live StoreRef.
+- When the uLisp task receives the bound-store completion, it first builds a
+  fresh bounded snapshot of the pending StoreRef, then replaces the live value
+  with StoreRowRefs and changes its status to ready. It invokes the stored
+  callback exactly once after that mutation, on the same uLisp task.
+- Changed the versioned Lisp entry to attach a heavily commented watch lambda.
+  The lambda reads `live` status, rows, and sample `desc`, then compares the
+  old snapshot status/value through a clearly test-only native observation
+  sink. The `app-start` closure now only returns its future Shell event.
+- Removed the old test event/evaluation queue so the proof cannot invoke the
+  app handler to inspect StoreRef state.
+
+### Observed result
+
+- Verbose CTest reported `store-bind=todo/items.csv status=ready watch=1` and
+  `store-ref-watch fired=1 ready=yes count=yes old=pending/nil`, followed by
+  `SILOS_TODO_BOOT_PASS` in 0.45 seconds.
+- The callback observes the live ready value after mutation while the old
+  snapshot remains pending with nil value. The app handler is registered but
+  never invoked by this storage proof.
+- One StoreRef watch is currently supported and remains rooted for the active
+  app lifetime. Watch removal and app-stop/reload release are intentionally
+  deferred. No vendored FreeRTOS or uLisp file changed.
+
+### Next question
+
+What schema-ordered Lisp record literal should `store-row-add` accept before
+the next phase adds row creation?
+
+## 2026-08-21 - Versioned startup-store import
+
+### Question
+
+Can Browser startup populate the volatile generic store catalogue from
+versioned input files, rather than from compiled C++ source and to-do constants?
+
+### Method
+
+- Added `runtime/store-init/` as the single startup input tree and configured
+  Emscripten to preload it into `/store-init` in the generated Wasm artifact.
+  CMake tracks every input file as a link dependency so changed inputs rebuild
+  the preload data.
+- Added a bounded recursive importer. The logical store name is each exact,
+  normalized relative filename: `apps/todo/app.lisp`,
+  `apps/todo/src/main.lisp`, and `todo/items.csv`.
+- Imported each `.lisp` file as insertion-ordered generic `text` rows. Imported
+  CSV headers as generic field names and CSV data records as generic rows with
+  loader-assigned sequential IDs and revision `1`.
+- Removed `BootSeed.cpp`/`.h`; neither app source nor to-do data remains as
+  compiled C++ constants. Updated the manifest entry and app bind to the new
+  extension-bearing logical store names.
+
+### Observed result
+
+- The Browser target configured, rebuilt, and passed CTest with the files
+  preloaded from `/store-init`. The app was therefore discovered from
+  `apps/todo/app.lisp`, evaluated from `apps/todo/src/main.lisp`, and bound
+  the imported `todo/items.csv` rows.
+- The importer rejects malformed or over-capacity input deterministically. Its
+  current bounds are 4096 bytes per file, 8 stores, 40 rows/store, 4 fields/row,
+  15-character field names, and 255-character source lines or field values.
+  CSV supports quoted commas and doubled quotes, but deliberately rejects
+  quoted line breaks and lone CR line endings.
+- No vendored FreeRTOS or uLisp file changed.
+
+### Next question
+
+What schema-ordered Lisp record literal should `store-row-add` accept before
+the next phase adds row creation?
