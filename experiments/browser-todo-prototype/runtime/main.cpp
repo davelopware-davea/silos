@@ -9,6 +9,8 @@
 
 #include <emscripten.h>
 
+#include "BootSeed.h"
+#include "InMemoryStoreBackend.h"
 #include "FreeRTOS.h"
 #include "queue.h"
 #include "task.h"
@@ -22,103 +24,11 @@ LittleFSClass LittleFS;
 WiFiClass WiFi;
 
 namespace {
-constexpr std::size_t StoreNameCapacity = 48;
-constexpr std::size_t SourceRowCapacity = 40;
-constexpr std::size_t TodoRowCapacity = 8;
-constexpr std::size_t StoreCapacity = 8;
+constexpr std::size_t StoreNameCapacity = InMemoryStoreNameCapacity;
 constexpr std::size_t ExpressionCapacity = 128;
 constexpr std::size_t OutputCapacity = 256;
 constexpr configSTACK_DEPTH_TYPE ULispTaskStackBytes = 65536U;
 constexpr configSTACK_DEPTH_TYPE ClientTaskStackBytes = 32768U;
-
-enum class StoreKind { Source, TodoItems };
-
-struct TodoRow {
-  int id = 0;
-  const char *description = nullptr;
-  const char *status = nullptr;
-};
-
-struct InMemoryStore {
-  char name[StoreNameCapacity];
-  StoreKind kind = StoreKind::Source;
-  const char *source_rows[SourceRowCapacity]{};
-  std::size_t source_row_count = 0;
-  TodoRow todo_rows[TodoRowCapacity]{};
-  std::size_t todo_row_count = 0;
-};
-
-// This deliberately small SRAM-style backend owns both source stores and the
-// one volatile data store needed by this experiment.  Its capacities are fixed
-// so the Browser proof continues to exercise the MCU-shaped bounded model.
-class InMemoryStoreBackend {
-public:
-  bool create_source(const char *name) {
-    if (count_ == std::size(stores_)) return false;
-    InMemoryStore &store = stores_[count_++];
-    std::snprintf(store.name, sizeof(store.name), "%s", name);
-    store.kind = StoreKind::Source;
-    return true;
-  }
-
-  bool append_source_row(const char *name, const char *text) {
-    InMemoryStore *store = find(name);
-    if (store == nullptr || store->kind != StoreKind::Source ||
-        store->source_row_count == std::size(store->source_rows)) return false;
-    store->source_rows[store->source_row_count++] = text;
-    return true;
-  }
-
-  bool create_todo_items(const char *name) {
-    if (count_ == std::size(stores_)) return false;
-    InMemoryStore &store = stores_[count_++];
-    std::snprintf(store.name, sizeof(store.name), "%s", name);
-    store.kind = StoreKind::TodoItems;
-    return true;
-  }
-
-  bool append_todo_row(const char *name, int id, const char *description,
-                       const char *status) {
-    InMemoryStore *store = find(name);
-    if (store == nullptr || store->kind != StoreKind::TodoItems ||
-        store->todo_row_count == std::size(store->todo_rows)) return false;
-    store->todo_rows[store->todo_row_count++] = TodoRow{id, description, status};
-    return true;
-  }
-
-  const InMemoryStore *get(const char *name) const {
-    for (std::size_t index = 0; index < count_; ++index) {
-      if (std::strcmp(stores_[index].name, name) == 0) return &stores_[index];
-    }
-    return nullptr;
-  }
-
-  const InMemoryStore *get_source(const char *name) const {
-    const InMemoryStore *store = get(name);
-    return store != nullptr && store->kind == StoreKind::Source ? store : nullptr;
-  }
-
-  const InMemoryStore *get_todo_items(const char *name) const {
-    const InMemoryStore *store = get(name);
-    return store != nullptr && store->kind == StoreKind::TodoItems ? store : nullptr;
-  }
-
-  template <typename Visitor>
-  void visit(Visitor visitor) const {
-    for (std::size_t index = 0; index < count_; ++index) visitor(stores_[index]);
-  }
-
-private:
-  InMemoryStore *find(const char *name) {
-    for (std::size_t index = 0; index < count_; ++index) {
-      if (std::strcmp(stores_[index].name, name) == 0) return &stores_[index];
-    }
-    return nullptr;
-  }
-
-  InMemoryStore stores_[StoreCapacity]{};
-  std::size_t count_ = 0;
-};
 
 struct AppDeclaration {
   char name[32];
@@ -130,9 +40,15 @@ struct AppDeclaration {
 
 struct EvalRequest { char expression[ExpressionCapacity]; };
 struct EvalResponse { char output[OutputCapacity]; };
-enum class StorageRequestKind { BindTodoItems };
-struct StorageRequest { StorageRequestKind kind; };
-struct StorageCompletion { StorageRequestKind kind; };
+enum class StorageRequestKind { BindStore };
+struct StorageRequest {
+  StorageRequestKind kind;
+  char store_name[StoreNameCapacity];
+};
+struct StorageCompletion {
+  StorageRequestKind kind;
+  char store_name[StoreNameCapacity];
+};
 
 InMemoryStoreBackend SourceStores;
 AppDeclaration CurrentDeclaration;
@@ -153,41 +69,6 @@ bool CapturingOutput = false;
 bool StoreBindStartedPending = false;
 bool StoreBindCompletedReady = false;
 
-// Each string below is one in-memory source row.  The app is not called
-// directly from C++; boot copies these rows into SourceStores and reads them
-// back through the same store lookup path used by the loader.
-constexpr const char *TodoManifestRows[] = {
-    "#| The bootstrap currently trusts this small manifest to contain only APP-DECLARE. |#",
-    "(app-declare :name \"To-do\" :ideal-width 24 :ideal-height 10 :entry \"apps/todo/src/main\")",
-};
-
-constexpr const char *TodoMainRows[] = {
-    "#| The entry source creates one lexical app instance and then returns. |#",
-    "#| APP-START retains the returned event-handler closure for the Shell. |#",
-    "(app-start",
-    "  (let ((todo-items",
-    "#| STORE-BIND returns a live StoreRef immediately, before its rows are ready. |#",
-    "         (store-bind \"todo/items\" '(desc status) 0 8)))",
-    "#| The handler is deliberately short: one event, one result, then return. |#",
-    "    (lambda (event)",
-    "      (cond",
-    "#| A StoreRef separates its request metadata from its current row collection. |#",
-    "        ((eq event 'binding-status)",
-    "         (field (field todo-items 'meta) 'status))",
-    "#| COUNT reads the live row collection. It is NIL while the bind is pending. |#",
-    "        ((eq event 'count)",
-    "         (let ((rows (field todo-items 'value)))",
-    "           (if rows (length rows) 0)))",
-    "#| This observes one bound StoreRowRef's named application field. |#",
-    "#| It makes no ordering promise; ordering is a separate future Store API. |#",
-    "        ((eq event 'sample-description)",
-    "         (let ((rows (field todo-items 'value)))",
-    "           (if rows",
-    "               (field (field (car rows) 'value) 'desc)",
-    "               nil)))",
-    "#| Unknown events are returned unchanged while the event API is still small. |#",
-    "        (t event)))))",
-};
 
 bool has_prefix(const char *text, const char *prefix) {
   return std::strncmp(text, prefix, std::strlen(prefix)) == 0;
@@ -208,24 +89,6 @@ void copy_request(EvalRequest &request, const char *expression) {
   std::snprintf(request.expression, sizeof(request.expression), "%s", expression);
 }
 
-void seed_boot_source_stores() {
-  configASSERT(SourceStores.create_source("apps/todo/app.lisp"));
-  for (const char *row : TodoManifestRows) {
-    configASSERT(SourceStores.append_source_row("apps/todo/app.lisp", row));
-  }
-  configASSERT(SourceStores.create_source("apps/todo/src/main"));
-  for (const char *row : TodoMainRows) {
-    configASSERT(SourceStores.append_source_row("apps/todo/src/main", row));
-  }
-
-  // These are ordinary volatile data rows, not a private C++ copy captured by
-  // the Lisp app.  The app receives them only through STORE-BIND below.
-  configASSERT(SourceStores.create_todo_items("todo/items"));
-  configASSERT(SourceStores.append_todo_row(
-      "todo/items", 1, "Learn how SilOS loads Lisp from a store", "to do"));
-  configASSERT(SourceStores.append_todo_row(
-      "todo/items", 2, "Build the first live screen binding", "in progress"));
-}
 }
 
 // These functions are called by the small generated uLisp adapter.  The
@@ -277,8 +140,14 @@ void configTime(long, int, const char *) {}
 
 namespace {
 int read_source_character() {
-  while (CurrentSource != nullptr && CurrentRow < CurrentSource->source_row_count) {
-    const char *row = CurrentSource->source_rows[CurrentRow];
+  while (CurrentSource != nullptr && CurrentRow < CurrentSource->row_count) {
+    const InMemoryStoreField *text =
+        SourceStores.find_field(CurrentSource->rows[CurrentRow], "text");
+    // The source loader asks for a named field just like any other store
+    // consumer.  A malformed source row is an assertion in this boot-only
+    // seed, not a second source-specific representation in the backend.
+    configASSERT(text != nullptr && text->value != nullptr);
+    const char *row = text->value;
     const char character = row[CurrentCharacter++];
     if (character != '\0') return static_cast<unsigned char>(character);
     ++CurrentRow;
@@ -298,24 +167,27 @@ int read_expression_character() {
 #include "ulisp-generated.inc"
 
 namespace {
-void complete_todo_items_bind() {
-  const InMemoryStore *store = SourceStores.get_todo_items("todo/items");
+void complete_store_bind(const StorageCompletion &completion) {
+  const InMemoryStore *store = SourceStores.get(completion.store_name);
   configASSERT(store != nullptr);
-  configASSERT(SilosTodoItemsRef != nil);
+  configASSERT(SilosBoundStoreRef != nil);
+  configASSERT(std::strcmp(completion.store_name, SilosBoundStoreName) == 0);
 
   // The storage task never mutates Lisp objects. It sends this bounded
   // completion, and the uLisp task alone installs the live row references.
-  object *value = silos_find_field(SilosTodoItemsRef, "value");
-  object *metadata = silos_find_field(SilosTodoItemsRef, "meta");
+  object *value = silos_find_field(SilosBoundStoreRef, "value");
+  object *metadata = silos_find_field(SilosBoundStoreRef, "meta");
   configASSERT(value != nil);
   configASSERT(metadata != nil);
   object *status = silos_find_field(cdr(metadata), "status");
   configASSERT(status != nil);
 
-  cdr(value) = silos_make_todo_row_refs(*store);
+  cdr(value) = silos_make_store_row_refs(*store, SilosBoundFieldNames,
+                                          SilosBoundFieldCount, SilosBoundStart,
+                                          SilosBoundCount);
   cdr(status) = silos_symbol("ready");
   StoreBindCompletedReady = true;
-  std::puts("store-bind=todo/items status=ready");
+  std::printf("store-bind=%s status=ready\n", completion.store_name);
   const bool ready = true;
   configASSERT(xQueueSend(BindReadyQueue, &ready, portMAX_DELAY) == pdPASS);
 }
@@ -323,8 +195,8 @@ void complete_todo_items_bind() {
 void process_storage_completions() {
   StorageCompletion completion{};
   while (xQueueReceive(StorageCompletionQueue, &completion, 0) == pdPASS) {
-    if (completion.kind == StorageRequestKind::BindTodoItems) {
-      complete_todo_items_bind();
+    if (completion.kind == StorageRequestKind::BindStore) {
+      complete_store_bind(completion);
     }
   }
 }
@@ -333,7 +205,10 @@ void storage_task(void *) {
   for (;;) {
     StorageRequest request{};
     configASSERT(xQueueReceive(StorageRequestQueue, &request, portMAX_DELAY) == pdPASS);
-    const StorageCompletion completion{request.kind};
+    StorageCompletion completion{};
+    completion.kind = request.kind;
+    std::snprintf(completion.store_name, sizeof(completion.store_name), "%s",
+                  request.store_name);
     configASSERT(xQueueSend(StorageCompletionQueue, &completion, portMAX_DELAY) == pdPASS);
   }
 }
@@ -392,7 +267,7 @@ bool bootstrap_apps() {
     CurrentDeclaration = AppDeclaration{};
     AppStarted = false;
     loaded = evaluate_source_store(store) && CurrentDeclaration.present && loaded;
-    const InMemoryStore *entry = SourceStores.get_source(CurrentDeclaration.entry);
+    const InMemoryStore *entry = SourceStores.get(CurrentDeclaration.entry);
     loaded = entry != nullptr && evaluate_source_store(*entry) && AppStarted && loaded;
     std::printf("manifest=%s app=%s entry=%s started=%s\n", store.name,
                 CurrentDeclaration.name, CurrentDeclaration.entry,
@@ -456,7 +331,7 @@ extern "C" void vApplicationMallocFailedHook() { vSilOSAssert("FreeRTOS heap exh
 extern "C" void vApplicationIdleHook() { vPortWaitForTick(); }
 
 int main() {
-  seed_boot_source_stores();
+  configASSERT(seed_boot_stores(SourceStores));
   RequestQueue = xQueueCreate(1, sizeof(EvalRequest));
   ResponseQueue = xQueueCreate(1, sizeof(EvalResponse));
   StorageRequestQueue = xQueueCreate(1, sizeof(StorageRequest));

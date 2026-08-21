@@ -64,7 +64,12 @@ object *fn_appdeclare (object *args, object *env) {
 }
 
 object *SilosActiveHandler = NULL;
-object *SilosTodoItemsRef = NULL;
+object *SilosBoundStoreRef = NULL;
+char SilosBoundStoreName[StoreNameCapacity]{};
+char SilosBoundFieldNames[InMemoryFieldsPerRowCapacity][InMemoryFieldNameCapacity]{};
+std::size_t SilosBoundFieldCount = 0;
+std::size_t SilosBoundStart = 0;
+std::size_t SilosBoundCount = 0;
 
 // Refs are ordinary, compact association lists in this experiment. FIELD is
 // the sole application-facing accessor, so a later packed representation need
@@ -83,6 +88,35 @@ bool silos_symbol_is (object *value, const char *name) {
 
 object *silos_symbol (const char *name) {
   return internlong(const_cast<char *>(name));
+}
+
+// FIELD receives a Lisp symbol, but the generic store keeps its field names
+// as bounded C strings.  PRINTSYMBOL is the one reader-independent bridge:
+// it works for uLisp's compact radix-40 symbols as well as long symbols.
+char SilosPrintedSymbol[InMemoryFieldNameCapacity]{};
+std::size_t SilosPrintedSymbolLength = 0;
+bool SilosPrintedSymbolOverflow = false;
+
+void silos_collect_symbol_character (char character) {
+  if (SilosPrintedSymbolLength + 1 >= sizeof(SilosPrintedSymbol)) {
+    SilosPrintedSymbolOverflow = true;
+    return;
+  }
+  SilosPrintedSymbol[SilosPrintedSymbolLength++] = character;
+}
+
+bool silos_copy_symbol_name (object *symbol, char name[], std::size_t capacity) {
+  if (!symbolp(symbol) || capacity == 0) return false;
+  SilosPrintedSymbolLength = 0;
+  SilosPrintedSymbolOverflow = false;
+  SilosPrintedSymbol[0] = '\0';
+  printsymbol(symbol, silos_collect_symbol_character);
+  if (SilosPrintedSymbolOverflow || SilosPrintedSymbolLength + 1 > capacity) {
+    return false;
+  }
+  SilosPrintedSymbol[SilosPrintedSymbolLength] = '\0';
+  std::snprintf(name, capacity, "%s", SilosPrintedSymbol);
+  return true;
 }
 
 object *silos_prepend_field (const char *name, object *value, object *tail) {
@@ -134,14 +168,21 @@ object *silos_make_pending_bind_ref () {
   return ref;
 }
 
-object *silos_make_todo_row_ref (const TodoRow &row) {
+object *silos_make_store_row_ref (const InMemoryStoreRow &row,
+                                  const char field_names[][InMemoryFieldNameCapacity],
+                                  std::size_t field_count) {
   object *value = nil;
-  object *status_text = lispstring(const_cast<char *>(row.status));
-  value = silos_prepend_field("status", status_text, value);
-  protect(value);
-  object *description = lispstring(const_cast<char *>(row.description));
-  value = silos_prepend_field("desc", description, value);
-  unprotect();
+  // Build only the fields named by STORE-BIND.  The row itself is generic:
+  // source rows and to-do rows are both read through this same lookup path.
+  for (std::size_t index = field_count; index > 0; --index) {
+    const InMemoryStoreField *field = SourceStores.find_field(
+        row, field_names[index - 1]);
+    if (field == nullptr) continue;
+    protect(value);
+    object *field_value = lispstring(const_cast<char *>(field->value));
+    value = silos_prepend_field(field->name, field_value, value);
+    unprotect();
+  }
 
   protect(value);
   object *metadata = nil;
@@ -151,10 +192,10 @@ object *silos_make_todo_row_ref (const TodoRow &row) {
   metadata = silos_prepend_field("status", ready, metadata);
   unprotect();
   protect(metadata);
-  metadata = silos_prepend_field("revision", number(1), metadata);
+  metadata = silos_prepend_field("revision", number(static_cast<int>(row.revision)), metadata);
   unprotect();
   protect(metadata);
-  metadata = silos_prepend_field("id", number(row.id), metadata);
+  metadata = silos_prepend_field("id", number(static_cast<int>(row.id)), metadata);
   unprotect();
 
   protect(metadata);
@@ -168,11 +209,18 @@ object *silos_make_todo_row_ref (const TodoRow &row) {
   return ref;
 }
 
-object *silos_make_todo_row_refs (const InMemoryStore &store) {
+object *silos_make_store_row_refs (const InMemoryStore &store,
+                                   const char field_names[][InMemoryFieldNameCapacity],
+                                   std::size_t field_count, std::size_t start,
+                                   std::size_t count) {
   object *rows = nil;
-  for (std::size_t index = store.todo_row_count; index > 0; --index) {
+  const std::size_t first = start < store.row_count ? start : store.row_count;
+  const std::size_t available = store.row_count - first;
+  const std::size_t selected = count < available ? count : available;
+  for (std::size_t index = first + selected; index > first; --index) {
     protect(rows);
-    object *row = silos_make_todo_row_ref(store.todo_rows[index - 1]);
+    object *row = silos_make_store_row_ref(store.rows[index - 1], field_names,
+                                            field_count);
     protect(row);
     rows = cons(row, rows);
     unprotect();
@@ -184,20 +232,9 @@ object *silos_make_todo_row_refs (const InMemoryStore &store) {
 object *fn_field (object *args, object *env) {
   (void) env;
   object *key = second(args);
-  if (!symbolp(key)) error("field name is not a symbol", key);
-  const char *name = nullptr;
-  if (silos_symbol_is(key, "meta")) name = "meta";
-  else if (silos_symbol_is(key, "value")) name = "value";
-  else if (silos_symbol_is(key, "operation")) name = "operation";
-  else if (silos_symbol_is(key, "status")) name = "status";
-  else if (silos_symbol_is(key, "error")) name = "error";
-  else if (silos_symbol_is(key, "id")) name = "id";
-  else if (silos_symbol_is(key, "revision")) name = "revision";
-  else if (silos_symbol_is(key, "desc")) name = "desc";
-  else {
-    error2("unknown field");
-    return nil;
-  }
+  char name[InMemoryFieldNameCapacity];
+  if (!silos_copy_symbol_name(key, name, sizeof(name)))
+    error("field name is not a supported symbol", key);
   object *entry = silos_find_field(first(args), name);
   if (entry == nil) error2("unknown field");
   return cdr(entry);
@@ -208,23 +245,37 @@ object *fn_storebind (object *args, object *env) {
   char name[StoreNameCapacity];
   cstring(checkstring(first(args)), name, sizeof(name));
   object *fields = second(args);
-  if (std::strcmp(name, "todo/items") != 0 ||
-      fields == nil || !silos_symbol_is(first(fields), "desc") ||
-      rest(fields) == nil || !silos_symbol_is(second(fields), "status") ||
-      cddr(fields) != nil || checkinteger(third(args)) != 0 ||
-      checkinteger(first(cdr(cddr(args)))) <= 0) {
+  const int start = checkinteger(third(args));
+  const int count = checkinteger(first(cdr(cddr(args))));
+  if (SourceStores.get(name) == nullptr || start < 0 || count <= 0) {
     error2("unsupported store-bind request");
   }
-  if (SilosTodoItemsRef != nil) error2("todo/items is already bound");
+  SilosBoundFieldCount = 0;
+  while (fields != nil) {
+    if (!consp(fields) || SilosBoundFieldCount == InMemoryFieldsPerRowCapacity ||
+        !silos_copy_symbol_name(first(fields),
+                                SilosBoundFieldNames[SilosBoundFieldCount],
+                                InMemoryFieldNameCapacity)) {
+      error2("unsupported store-bind fields");
+    }
+    ++SilosBoundFieldCount;
+    fields = rest(fields);
+  }
+  if (SilosBoundStoreRef != nil) error2("a store is already bound");
 
-  SilosTodoItemsRef = silos_make_pending_bind_ref();
+  SilosBoundStoreRef = silos_make_pending_bind_ref();
+  std::snprintf(SilosBoundStoreName, sizeof(SilosBoundStoreName), "%s", name);
+  SilosBoundStart = static_cast<std::size_t>(start);
+  SilosBoundCount = static_cast<std::size_t>(count);
   StoreBindStartedPending = true;
-  const StorageRequest request{StorageRequestKind::BindTodoItems};
+  StorageRequest request{};
+  request.kind = StorageRequestKind::BindStore;
+  std::snprintf(request.store_name, sizeof(request.store_name), "%s", name);
   if (xQueueSend(StorageRequestQueue, &request, 0) != pdPASS) {
     error2("storage request queue is full");
   }
-  std::puts("store-bind=todo/items status=pending");
-  return SilosTodoItemsRef;
+  std::printf("store-bind=%s status=pending\n", name);
+  return SilosBoundStoreRef;
 }
 
 object *fn_appstart (object *args, object *env) {
@@ -244,7 +295,7 @@ object *fn_silostestevent (object *args, object *env) {
 
 void silos_mark_roots () {
   markobject(SilosActiveHandler);
-  markobject(SilosTodoItemsRef);
+  markobject(SilosBoundStoreRef);
 }
 
 ]])
@@ -264,6 +315,8 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/ulisp-generated.inc" "${ULISP_GENERATED_
 
 add_executable(silos_todo_boot
   main.cpp
+  InMemoryStoreBackend.cpp
+  BootSeed.cpp
   "${FREERTOS_EMSCRIPTEN_PORT}/port.c"
   "${FREERTOS_KERNEL}/list.c"
   "${FREERTOS_KERNEL}/queue.c"

@@ -117,3 +117,38 @@ rather than retaining a private Lisp list?
 
 What record-literal representation should `store-row-add` accept before the
 next phase adds app-side row creation?
+
+## 2026-08-20 - Generic volatile store catalogue
+
+### Question
+
+Can the boot-loaded Lisp source and volatile to-do rows use the same bounded
+in-memory store representation, without the backend encoding either row shape?
+
+### Method
+
+- Split the in-memory backend from the Browser runtime into
+  `InMemoryStoreBackend.h` and `.cpp`, and moved all hard-coded boot data into
+  `BootSeed.cpp`.
+- Replaced the source-store and to-do-store union with one catalogue of exact
+  store names. Each row carries stable `id`/`revision` metadata and a bounded
+  list of named string fields.
+- Seeded source as ordinary rows with a `text` field and to-dos as ordinary
+  rows with `desc` and `status` fields. The source reader and StoreRef adapter
+  both retrieve fields by name through the same backend lookup.
+- Kept `store-bind` and `field` as the documented Lisp-facing operations. The
+  adapter now copies bounded field names from Lisp symbols and honours its
+  `start`/`count` window while building StoreRowRefs.
+
+### Observed result
+
+- Emscripten configure/build succeeded. The first CTest attempt hit the known
+  transient OneDrive `EPERM` lock while Node opened the generated bundle; the
+  unchanged retry passed `silos_todo_boot` in 0.52 seconds.
+- The passing test retained the pending-to-ready bind, count (`2`), and named
+  `desc` field-read proof. No files under either vendored upstream tree changed.
+
+### Next question
+
+What schema-ordered Lisp record literal should `store-row-add` accept before
+the next phase adds row creation?

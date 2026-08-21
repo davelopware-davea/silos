@@ -43,8 +43,11 @@ and delete to-do items, and persists those items across restart.
 
 ## Current bootstrap subset
 
-- The native bootstrap seeds read-only source rows in order for
-  `apps/todo/app.lisp` and `apps/todo/src/main`.
+- The native bootstrap seeds one volatile, fixed-capacity generic catalogue.
+  Every store has generic rows with stable ID/revision metadata and bounded
+  named string fields: source rows use `text`; to-do rows use `desc` and
+  `status`. This is an experiment-owned in-memory representation, not a
+  commitment to the final store layout.
 - It temporarily discovers only exact manifest names shaped
   `apps/<app-name>/app.lisp`. This is a one-app bootstrap shortcut, not the
   future catalogue design.
