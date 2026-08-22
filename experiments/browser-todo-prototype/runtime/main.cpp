@@ -199,7 +199,57 @@ int read_source_character() {
 
 }
 
+void silos_browser_surface_begin(const char *state, const char *message);
+void silos_browser_surface_add_field(int row_index, const char *name,
+                                     const char *value);
+
 #include "ulisp-generated.inc"
+
+// The Browser surface is a deliberately thin projection of the bounded UI
+// model. It receives only the template renderer's already-resolved fields; it
+// neither reads StoreRefs nor sends input or mutation requests back to Lisp.
+void silos_browser_surface_begin(const char *state, const char *message) {
+  EM_ASM({
+    if (typeof document === 'undefined') return;
+    const root = document.getElementById('silos-app');
+    if (root == null) return;
+    root.replaceChildren();
+    const title = document.createElement('h1');
+    title.textContent = 'SilOS to-dos';
+    const summary = document.createElement('p');
+    summary.className = 'silos-ui-state';
+    summary.dataset.state = UTF8ToString($0);
+    summary.textContent = UTF8ToString($1);
+    root.append(title, summary);
+    if (summary.dataset.state === 'ready') {
+      const list = document.createElement('ul');
+      list.id = 'silos-todo-list';
+      list.setAttribute('aria-label', 'Bound to-do items');
+      root.append(list);
+    }
+  }, state, message);
+}
+
+void silos_browser_surface_add_field(int row_index, const char *name,
+                                     const char *value) {
+  EM_ASM({
+    if (typeof document === 'undefined') return;
+    const list = document.getElementById('silos-todo-list');
+    if (list == null) return;
+    const index = String($0);
+    let row = list.querySelector('li[data-row-index="' + index + '"]');
+    if (row == null) {
+      row = document.createElement('li');
+      row.dataset.rowIndex = index;
+      list.append(row);
+    }
+    const field = document.createElement('span');
+    field.className = 'silos-template-field';
+    field.dataset.field = UTF8ToString($1);
+    field.textContent = UTF8ToString($2);
+    row.append(field);
+  }, row_index, name, value);
+}
 
 namespace {
 void complete_store_bind(const StorageCompletion &completion) {

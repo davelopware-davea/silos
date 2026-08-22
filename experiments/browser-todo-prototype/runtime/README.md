@@ -18,7 +18,9 @@ experiment's clean FreeRTOS and uLisp vendor trees. It then:
 7. declares a bounded UiRef/item-template/list/mount and renders both imported
    to-dos after the StoreRef reaches ready, alongside the watch's ready status,
    bound-row count, named `desc` field read, and preserved pending/nil old
-   snapshot.
+   snapshot; and
+8. projects those renderer-resolved list fields into the `#silos-app` Browser
+   DOM surface without adding input handling or a browser-to-store path.
 
 This proof exercises the corresponding subset of the proposed
 [UI API](../../../docs/design/API-UI.md); it does not commit the experiment to
@@ -75,3 +77,11 @@ emcmake cmake -S experiments/browser-todo-prototype/runtime -B experiments/brows
 cmake --build experiments/browser-todo-prototype/build
 ctest --test-dir experiments/browser-todo-prototype/build --output-on-failure
 ```
+
+Open `experiments/browser-todo-prototype/build/browser-surface.html` through a
+local web server (the page loads the adjacent Emscripten JavaScript, WASM, and
+preloaded data files). When its StoreRef becomes ready, `#silos-todo-list`
+contains the two bound rows. Each row's `.silos-template-field` elements retain
+the declared field name in `data-field` and display the template-width-chopped
+value. The page is a one-way display adapter: it does not handle input or call
+back into the Store.

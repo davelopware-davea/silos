@@ -16,6 +16,11 @@ file(GLOB_RECURSE STORE_INIT_FILES CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/store-init/*"
 )
 
+# Keep the executable JavaScript target for CTest, and stage a small HTML
+# launcher alongside it for the Browser proof. The launcher owns only the
+# document surface; the runtime continues to own all UI/template data.
+configure_file(browser-surface.html.in browser-surface.html @ONLY)
+
 # Arduino normally inserts forward declarations while preprocessing a sketch.
 # Generate those declarations in an adapter, keeping the vendored uLisp source
 # byte-for-byte unchanged.
@@ -396,20 +401,24 @@ void silos_render_ui() {
   object *metadata = silos_find_field(SilosUiSourceRef, "meta");
   object *status = metadata == nil ? nil : silos_find_field(cdr(metadata), "status");
   if (status == nil || silos_symbol_is(cdr(status), "pending")) {
+    silos_browser_surface_begin("pending", SilosUiPendingText);
     std::printf("ui-list region=main state=pending text=%s\\n", SilosUiPendingText);
     UiPendingRendered = true;
     return;
   }
   if (!silos_symbol_is(cdr(status), "ready")) {
+    silos_browser_surface_begin("error", SilosUiErrorText);
     std::printf("ui-list region=main state=error text=%s\\n", SilosUiErrorText);
     return;
   }
   object *value = silos_find_field(SilosUiSourceRef, "value");
   object *rows = value == nil ? nil : cdr(value);
   if (rows == nil) {
+    silos_browser_surface_begin("empty", SilosUiEmptyText);
     std::printf("ui-list region=main state=empty text=%s\\n", SilosUiEmptyText);
     return;
   }
+  silos_browser_surface_begin("ready", "Bound to-do items");
   std::printf("ui-list region=main state=ready\\n");
   std::size_t row_index = 0;
   while (rows != nil && row_index < 5) {
@@ -426,6 +435,8 @@ void silos_render_ui() {
         rendered[SilosUiFields[field_index].width < static_cast<int>(sizeof(rendered)) ?
                  SilosUiFields[field_index].width : static_cast<int>(sizeof(rendered)) - 1] = '\0';
         std::printf(" %s=%s", SilosUiFields[field_index].name, rendered);
+        silos_browser_surface_add_field(static_cast<int>(row_index),
+                                        SilosUiFields[field_index].name, rendered);
       }
     }
     std::printf("\\n");

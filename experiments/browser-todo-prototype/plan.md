@@ -1,8 +1,8 @@
 # Browser to-do prototype plan
 
-**Status:** In progress; the Browser boot/load, read-only StoreRef, and bounded
-lifecycle/poke/UI-model proofs are complete and checkpointed. Browser-visible
-template rendering is the next proof.
+**Status:** In progress; the Browser boot/load, read-only StoreRef, bounded
+lifecycle/poke/UI-model, and browser-visible template-rendering proofs are
+complete. The `store-row-add` representation and validation decision is next.
 
 **Project context:** [SilOS plan](../../docs/design/SilOS_PLAN.md).
 
@@ -14,8 +14,7 @@ template rendering is the next proof.
   `codex/browser-todo-prototype`. A prior session accidentally continued in a
   stale OneDrive checkout; its content was reconciled into `src` by
   Git-normalised hashes and verified against committed history through
-  `d992ad6 design: add bounded UI API proposal`, plus the current uncommitted
-  lifecycle/UI/cross-reference work.
+  `e146103 feat: prove browser todo lifecycle and UI binding`.
 - The proof has a general queue-backed `(app-request-poke arg...)` boundary
   that delivers fresh `(poke . payload)` values, a later-turn
   `app-initialise`, application-owned `init` stages, one StoreRef watch, and
@@ -28,11 +27,10 @@ template rendering is the next proof.
 - Leave `stash@{0}` (`codex-migration-pre-sync-2026-08-22`) and the unrelated
   untracked `.vscode/` directory untouched.
 
-**Next session, without beginning it:** render the bounded bound-template list
-on an actual Browser surface and verify the two imported rows are visibly
-template-driven. Only then decide and document the Lisp record representation
-and validation for `store-row-add`; implement create/edit/delete in separately
-delegated phases afterwards, followed by persistence and restart behaviour.
+**Next session, without beginning it:** decide and document the Lisp record
+representation and validation for `store-row-add`; implement create/edit/delete
+in separately delegated phases afterwards, verifying each phase against the
+browser-visible bound template, followed by persistence and restart behaviour.
 
 ## Goal
 
@@ -68,9 +66,9 @@ and delete to-do items, and persists those items across restart.
    delivery, application-owned staged pokes, one StoreRef watch, and bounded
    templates/UiRefs/lists/mount are proven. Semantic input actions remain out
    of scope for this proof.
-6. **[next]** Render the bounded bound-template list on a real Browser surface
+6. **[done]** Render the bounded bound-template list on a real Browser surface
    and verify that the two imported rows are visibly template-driven.
-7. **[planned]** Decide and document the Lisp record representation and
+7. **[next]** Decide and document the Lisp record representation and
    validation for `store-row-add`.
 8. **[planned]** Implement create, edit, and delete in separately delegated
    phases.
@@ -115,8 +113,9 @@ and delete to-do items, and persists those items across restart.
   The app's generic two-stage poke sequence binds its StoreRef, then declares
   and mounts the bounded StoreRef-backed to-do list. The proof currently
   renders both imported rows through its UiRef and item-template metadata to
-  the native diagnostic stream. Browser-visible output is its next separate
-  gate; it adds no semantic input handling.
+  a small Browser DOM surface. The `browser-surface.html` launcher is staged
+  beside the Emscripten output and receives only renderer-resolved state and
+  field values; it adds no semantic input handling or store mutation.
 - This increment supports only `desc` and `status` field reads. It deliberately
   excludes row record literals, creation, updates, deletion, ordering,
   semantic input, and persistence.

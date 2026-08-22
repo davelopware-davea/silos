@@ -372,3 +372,43 @@ visible?
 What is the smallest Browser surface adapter that can visibly render the
 existing two bound template rows while preserving the current bounded UI model
 and avoiding semantic input or store mutation?
+
+## 2026-08-22 - Browser-visible bound-template rendering
+
+### Question
+
+Can the completed bounded UI proof project its template-driven list to a real
+Browser surface without creating a second UI data model or introducing semantic
+input/store mutation?
+
+### Method
+
+- Added a small `browser-surface.html` launcher beside the Emscripten output;
+  it supplies the `#silos-app` document region and loads the existing runtime
+  JavaScript, WASM, and preloaded store data from the same local web origin.
+- Kept `silos_render_ui` as the sole renderer. Its existing resolved list
+  state and bounded/chopped template fields now call a one-way Browser adapter
+  which clears/rebuilds the DOM, creates a ready-state list, and appends each
+  resolved field as a named element. The adapter cannot access a StoreRef and
+  has no input or mutation operation.
+- Rebuilt and ran CTest, then loaded the staged page through a local HTTP
+  server in the Browser. Inspected both the rendered page and its DOM field
+  metadata after startup completed.
+
+### Observed result
+
+- CTest passed in the authoritative checkout: 1/1 in 0.38 seconds.
+- The real Browser surface reached `data-state="ready"` and displayed exactly
+  two `#silos-todo-list` rows. The DOM showed template fields in order:
+  row 0 `desc="Learn how SilOS loads Lisp from "`, `status="to do"`; row 1
+  `desc="Build the first live screen bind"`, `status="in progress"`. The
+  first description is correctly chopped by its declared 32-character width.
+- Visual inspection showed the same two item rows and their status values on
+  the page. No vendor files changed, and no semantic input or store mutation
+  path was added.
+
+### Next question
+
+What Lisp record representation and validation should `store-row-add` require
+before separately delegated create/edit/delete phases, each verified through
+this browser-visible bound-template surface?

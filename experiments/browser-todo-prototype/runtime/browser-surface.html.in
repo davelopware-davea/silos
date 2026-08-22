@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SilOS browser to-do proof</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 2rem; color: #18212f; }
+      #silos-app { max-width: 44rem; }
+      .silos-ui-state { color: #52606d; }
+      #silos-todo-list { padding-left: 1.4rem; }
+      #silos-todo-list li { margin: .65rem 0; }
+      .silos-template-field { display: block; }
+      .silos-template-field[data-field="status"] { color: #52606d; font-size: .9rem; }
+    </style>
+  </head>
+  <body>
+    <main id="silos-app" aria-live="polite">
+      <p class="silos-ui-state" data-state="booting">Starting SilOS…</p>
+    </main>
+    <script>
+      // The runtime remains the source of UI state; this loader only starts it.
+      var Module = {};
+    </script>
+    <script src="./silos-todo-boot.js"></script>
+  </body>
+</html>
