@@ -32,6 +32,10 @@ Each phase pauses after its Browser visual check so the user can run
   64-row limit and its test proves the ready status, bounded row count,
   indexed row-field read, and old pending status without exposing the backing
   association-list representation.
+- The bound template now also begins each visible row with template-owned
+  literal text via `(ui-text "TODO:")`, before its existing description and
+  status fields. Literal and field text share one fixed three-instruction
+  descriptor capacity; the app source remains within its 64-row limit.
 - Leave `stash@{0}` (`codex-migration-pre-sync-2026-08-22`) and the unrelated
   untracked `.vscode/` directory untouched.
 
@@ -131,7 +135,8 @@ and delete to-do items, and persists those items across restart.
 - After `app-start`, the Shell queues one later-turn `app-initialise` event.
   The app's generic two-stage poke sequence binds its StoreRef, then declares
   and mounts the bounded StoreRef-backed to-do list. The proof currently
-  renders both imported rows through its UiRef and item-template metadata to
+  renders both imported rows through its UiRef and item-template metadata,
+  including ordered template-owned literal text, to
   a small Browser DOM surface. The `browser-surface.html` launcher is staged
   beside the Emscripten output and receives only renderer-resolved state and
   field values; it adds no semantic input handling or store mutation.

@@ -10,7 +10,7 @@
       .silos-ui-state { color: #52606d; }
       #silos-todo-list { padding-left: 1.4rem; }
       #silos-todo-list li { margin: .65rem 0; }
-      .silos-template-field { display: block; }
+      .silos-template-field, .silos-template-literal { display: block; }
       .silos-template-field[data-field="status"] { color: #52606d; font-size: .9rem; }
     </style>
   </head>

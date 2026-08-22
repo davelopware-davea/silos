@@ -19,7 +19,8 @@ experiment's clean FreeRTOS and uLisp vendor trees. It then:
    binding and mounting occur only in the application's requested stages; and
 7. declares a bounded UiRef/item-template/list/mount with `ui-bind`, `ui-type`,
    `ui-template`, `ui-template-list`, `ui-field`, and `ui-text`, then renders
-   both imported to-dos after the StoreRef reaches ready, alongside the
+   template-owned literal text followed by both fields for each imported to-do
+   after the StoreRef reaches ready, alongside the
    watch's ready status, bounded-row count, named `desc` field read, and
    preserved pending/nil old snapshot; and
 8. projects those renderer-resolved list fields into the `#silos-app` Browser
@@ -98,6 +99,7 @@ silently configuring a non-Browser build.
 
 The page loads adjacent Emscripten JavaScript, WASM, and preloaded data files.
 When its StoreRef becomes ready, `#silos-todo-list` contains the two bound rows.
-Each row's `.silos-template-field` elements retain the declared field name in
+Each row begins with a `.silos-template-literal` containing `TODO:`, followed
+by `.silos-template-field` elements that retain the declared field name in
 `data-field` and display the template-width-chopped value. The page is a
 one-way display adapter: it does not handle input or call back into the Store.

@@ -67,7 +67,7 @@ const char doc_storerowfield[] = "(store-row-field store-row-ref field)\nReads a
 const char doc_apppoke[] = "(app-request-poke arg...)";
 const char doc_uitype[] = "(ui-type name (field type slot)...)";
 const char doc_uibind[] = "(ui-bind name type value)";
-const char doc_uitemplate[] = "(ui-template name (item type) (ui-text (ui-field item field) :width integer :overflow chop)...)";
+const char doc_uitemplate[] = "(ui-template name (item type) (ui-text string | (ui-field item field) :width integer :overflow chop)...)";
 const char doc_uitemplatelist[] = "(ui-template-list name :source ui-ref :item-template template :offset integer :limit integer :pending string :empty string :error string)";
 const char doc_uimount[] = "(ui-mount list :region region)";
 
@@ -101,28 +101,37 @@ std::size_t SilosBoundStart = 0;
 std::size_t SilosBoundCount = 0;
 
 // This is intentionally a small real template registry, not a Todo-specific
-// print path. It contains identifiers and bounded field descriptors only;
+// print path. It contains identifiers and bounded ordered instructions only;
 // values remain in the uLisp StoreRef and are streamed during a Shell redraw.
-constexpr std::size_t SilosUiFieldCapacity = 3;
+constexpr std::size_t SilosUiTypeFieldCapacity = 3;
+constexpr std::size_t SilosUiInstructionCapacity = 3;
 struct SilosUiTypeField {
   char name[InMemoryFieldNameCapacity]{};
   int slot = -1;
 };
-struct SilosUiField {
+enum class SilosUiInstructionKind {
+  LiteralText,
+  FieldText,
+};
+struct SilosUiInstruction {
+  SilosUiInstructionKind kind = SilosUiInstructionKind::LiteralText;
   char name[InMemoryFieldNameCapacity]{};
+  char literal[PokeStringCapacity]{};
   int width = 0;
 };
 object *SilosUiSourceRef = NULL;
 char SilosUiTypeName[InMemoryFieldNameCapacity]{};
-SilosUiTypeField SilosUiTypeFields[SilosUiFieldCapacity]{};
+SilosUiTypeField SilosUiTypeFields[SilosUiTypeFieldCapacity]{};
 std::size_t SilosUiTypeFieldCount = 0;
-SilosUiField SilosUiFields[SilosUiFieldCapacity]{};
-std::size_t SilosUiFieldCount = 0;
+SilosUiInstruction SilosUiInstructions[SilosUiInstructionCapacity]{};
+std::size_t SilosUiInstructionCount = 0;
 bool SilosUiTypeDeclared = false;
 bool SilosUiRefDeclared = false;
 bool SilosUiItemTemplateDeclared = false;
 bool SilosUiListDeclared = false;
 bool SilosUiMounted = false;
+bool SilosUiLiteralDeclared = false;
+bool SilosUiLiteralRendered = false;
 int SilosUiRefHandle = 0;
 int SilosUiTemplateHandle = 0;
 int SilosUiListHandle = 0;
@@ -543,18 +552,28 @@ void silos_render_ui() {
     if (!consp(rows)) { std::printf("ui-list render-error=improper-rows\\n"); return; }
     object *row_value = silos_find_field(first(rows), "value");
     std::printf("ui-row index=%zu", row_index);
-    for (std::size_t field_index = 0; field_index < SilosUiFieldCount; ++field_index) {
-      object *field = row_value == nil ? nil : silos_find_field(cdr(row_value), SilosUiFields[field_index].name);
+    for (std::size_t instruction_index = 0;
+         instruction_index < SilosUiInstructionCount; ++instruction_index) {
+      const SilosUiInstruction &instruction = SilosUiInstructions[instruction_index];
+      if (instruction.kind == SilosUiInstructionKind::LiteralText) {
+        std::printf(" text=%s", instruction.literal);
+        silos_browser_surface_add_text(static_cast<int>(row_index), nullptr,
+                                       instruction.literal);
+        SilosUiLiteralRendered = true;
+        continue;
+      }
+      object *field = row_value == nil ? nil :
+          silos_find_field(cdr(row_value), instruction.name);
       if (field == nil || !stringp(cdr(field))) {
-        std::printf(" %s=<invalid>", SilosUiFields[field_index].name);
+        std::printf(" %s=<invalid>", instruction.name);
       } else {
         char rendered[InMemoryFieldValueCapacity]{};
         cstring(cdr(field), rendered, sizeof(rendered));
-        rendered[SilosUiFields[field_index].width < static_cast<int>(sizeof(rendered)) ?
-                 SilosUiFields[field_index].width : static_cast<int>(sizeof(rendered)) - 1] = '\0';
-        std::printf(" %s=%s", SilosUiFields[field_index].name, rendered);
-        silos_browser_surface_add_field(static_cast<int>(row_index),
-                                        SilosUiFields[field_index].name, rendered);
+        rendered[instruction.width < static_cast<int>(sizeof(rendered)) ?
+                 instruction.width : static_cast<int>(sizeof(rendered)) - 1] = '\0';
+        std::printf(" %s=%s", instruction.name, rendered);
+        silos_browser_surface_add_text(static_cast<int>(row_index),
+                                       instruction.name, rendered);
       }
     }
     std::printf("\\n");
@@ -589,7 +608,7 @@ object *fn_uitype (object *args, object *env) {
   (void) env;
   if (SilosUiTypeDeclared || !symbolp(first(args))) error2("invalid ui type");
   const int field_count = listlength(cdr(args));
-  if (field_count < 1 || field_count > static_cast<int>(SilosUiFieldCapacity) ||
+  if (field_count < 1 || field_count > static_cast<int>(SilosUiTypeFieldCapacity) ||
       !silos_copy_symbol_name(first(args), SilosUiTypeName,
                               sizeof(SilosUiTypeName))) {
     error2("invalid ui type");
@@ -653,9 +672,21 @@ object *fn_uitemplate (object *args, object *env) {
   args = cddr(args);
   while (args != nil) {
     object *spec = first(args);
-    if (!consp(spec) || listlength(spec) != 6 ||
-        SilosUiFieldCount == SilosUiFieldCapacity ||
-        !silos_symbol_name_is(first(spec), "ui-text") || !consp(second(spec)) ||
+    if (!consp(spec) || SilosUiInstructionCount == SilosUiInstructionCapacity ||
+        !silos_symbol_name_is(first(spec), "ui-text")) {
+      error2("invalid ui instruction");
+    }
+    SilosUiInstruction &instruction =
+        SilosUiInstructions[SilosUiInstructionCount];
+    if (listlength(spec) == 2 && stringp(second(spec))) {
+      cstring(second(spec), instruction.literal, sizeof(instruction.literal));
+      instruction.kind = SilosUiInstructionKind::LiteralText;
+      SilosUiLiteralDeclared = true;
+      ++SilosUiInstructionCount;
+      args = rest(args);
+      continue;
+    }
+    if (listlength(spec) != 6 || !consp(second(spec)) ||
         listlength(second(spec)) != 3 ||
         !silos_symbol_name_is(first(second(spec)), "ui-field") ||
         !silos_symbol_name_is(second(second(spec)), item_parameter) ||
@@ -664,17 +695,18 @@ object *fn_uitemplate (object *args, object *env) {
         !integerp(second(cddr(spec))) ||
         !silos_symbol_name_is(first(cddr(cddr(spec))), ":overflow") ||
         !silos_symbol_name_is(second(cddr(cddr(spec))), "chop")) {
-      error2("invalid ui field");
+      error2("invalid ui field text");
     }
     if (!silos_copy_symbol_name(third(second(spec)),
-                                SilosUiFields[SilosUiFieldCount].name,
+                                instruction.name,
                                 InMemoryFieldNameCapacity)) error2("ui field too long");
-    SilosUiFields[SilosUiFieldCount].width = checkinteger(second(cddr(spec)));
-    if (SilosUiFields[SilosUiFieldCount].width < 1 || SilosUiFields[SilosUiFieldCount].width > 32) error2("invalid ui field width");
-    ++SilosUiFieldCount;
+    instruction.kind = SilosUiInstructionKind::FieldText;
+    instruction.width = checkinteger(second(cddr(spec)));
+    if (instruction.width < 1 || instruction.width > 32) error2("invalid ui field width");
+    ++SilosUiInstructionCount;
     args = rest(args);
   }
-  if (SilosUiFieldCount == 0) error2("empty ui item template");
+  if (SilosUiInstructionCount == 0) error2("empty ui item template");
   SilosUiItemTemplateDeclared = true;
   SilosUiTemplateHandle = 2;
   return number(SilosUiTemplateHandle);

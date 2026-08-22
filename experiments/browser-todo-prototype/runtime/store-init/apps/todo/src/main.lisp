@@ -6,6 +6,7 @@
 ; The Shell owns this immutable description, never a current row value.
 (defvar todo-row
   (ui-template todo-row (item todo-item)
+    (ui-text "TODO:")
     (ui-text (ui-field item desc) :width 32 :overflow chop)
     (ui-text (ui-field item status) :width 16 :overflow chop)))
 

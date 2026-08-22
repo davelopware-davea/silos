@@ -200,8 +200,8 @@ int read_source_character() {
 }
 
 void silos_browser_surface_begin(const char *state, const char *message);
-void silos_browser_surface_add_field(int row_index, const char *name,
-                                     const char *value);
+void silos_browser_surface_add_text(int row_index, const char *field_name,
+                                    const char *value);
 
 #include "ulisp-generated.inc"
 
@@ -230,8 +230,8 @@ void silos_browser_surface_begin(const char *state, const char *message) {
   }, state, message);
 }
 
-void silos_browser_surface_add_field(int row_index, const char *name,
-                                     const char *value) {
+void silos_browser_surface_add_text(int row_index, const char *field_name,
+                                    const char *value) {
   EM_ASM({
     if (typeof document === 'undefined') return;
     const list = document.getElementById('silos-todo-list');
@@ -243,12 +243,17 @@ void silos_browser_surface_add_field(int row_index, const char *name,
       row.dataset.rowIndex = index;
       list.append(row);
     }
-    const field = document.createElement('span');
-    field.className = 'silos-template-field';
-    field.dataset.field = UTF8ToString($1);
-    field.textContent = UTF8ToString($2);
-    row.append(field);
-  }, row_index, name, value);
+    const text = document.createElement('span');
+    if ($1 === 0) {
+      text.className = 'silos-template-literal';
+      text.dataset.templateKind = 'literal';
+    } else {
+      text.className = 'silos-template-field';
+      text.dataset.field = UTF8ToString($1);
+    }
+    text.textContent = UTF8ToString($2);
+    row.append(text);
+  }, row_index, field_name, value);
 }
 
 namespace {
@@ -415,8 +420,9 @@ void client_task(void *) {
                       AppObservedStageTwo && AppObservedPokeFifo &&
                       AppEventCount == 3 && AppPokeCount == 2 &&
                       SilosUiTypeDeclared && SilosUiRefDeclared &&
-                      SilosUiItemTemplateDeclared && SilosUiListDeclared &&
-                      SilosUiMounted && UiReadyRendered;
+                      SilosUiItemTemplateDeclared && SilosUiLiteralDeclared &&
+                      SilosUiListDeclared && SilosUiMounted && UiReadyRendered &&
+                      SilosUiLiteralRendered;
   std::printf("store-watch fired=%d ready=%s count=%s old=pending/%s\n",
               StoreRefWatchInvocationCount,
               StoreRefWatchObservedReady ? "yes" : "no",

@@ -521,3 +521,38 @@ bounded rendering/lifecycle behaviour?
 
 What record representation and validation should `store-row-add` use before
 the first editable-store phase, which must again end at this visual-check gate?
+
+## 2026-08-22 - Template-owned literal text
+
+### Question
+
+Can each bound row visibly begin with static `TODO:` text owned by the Lisp
+template, without embedding that text in the Browser adapter or row values?
+
+### Method
+
+- Added `(ui-text "TODO:")` as the first instruction in `todo-row`.
+- Generalised the bounded template descriptor from field-only entries to three
+  ordered literal-or-field text instructions. A literal is copied once into
+  immutable template metadata and streamed for every row.
+- Kept the Browser adapter one-way: it receives renderer-resolved ordered text
+  and marks literals separately from named fields in the DOM.
+- Rebuilt, ran CTest, then launched `view-browser.sh` in Git Bash on loopback
+  and inspected the generated DOM and Browser surface.
+
+### Observed result
+
+- CTest passed: `1/1` in `0.41` seconds.
+- The launcher served `browser-surface.html` at
+  `http://127.0.0.1:8768/browser-surface.html`. The Browser reached its ready
+  list and rendered two rows. Each row's first child was a
+  `.silos-template-literal` containing `TODO:`, followed in order by the
+  existing `desc` and `status` field elements.
+- The visible rows began with `TODO:` and retained the existing 32-character
+  description chopping. The app source remains within its fixed 64-row limit;
+  no vendor files changed.
+
+### Next question
+
+Does the user approve the literal-first Browser result at the visual-check
+gate before the `store-row-add` record and validation decision begins?

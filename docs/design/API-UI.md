@@ -16,7 +16,7 @@ and [Store API](API-BoundQueueStore.md).
 | [`ui-template`](#ui-template) | Declare a reusable typed item template. |
 | [`ui-template-list`](#ui-template-list) | Declare a bounded visible-window list template. |
 | [`ui-field`](#ui-field) | Read a declared item field within a UI template. |
-| [`ui-text`](#ui-text) | Stream a text field while rendering a UI template. |
+| [`ui-text`](#ui-text) | Stream literal or field text while rendering a UI template. |
 | [`ui-date`](#ui-date) | Stream a formatted date field while rendering a UI template. |
 | [`ui-mount`](#ui-mount) | Place a template or list in a Shell-defined region. |
 | [`ui-invalidate`](#ui-invalidate) | Mark views depending on a UiRef dirty. |
@@ -113,21 +113,24 @@ is `todo-item`.
 (ui-template todo-row (item todo-item)
   ;; `item` is a transient parameter supplied once per visible row.  It does
   ;; not allocate a variable or retain the current record after the refresh.
+  (ui-text "TODO:")
   (ui-text (ui-field item desc)   :width 16 :overflow chop)
   (ui-date (ui-field item target) :format "yyyy-mm-dd")
   (ui-text (ui-field item status) :width 6  :overflow chop))
 ```
 
-An item template accepts only its declared item parameter and `(ui-field item
-field-name)` bindings in this increment.  `ui-text` and `ui-date` stream output
-while rendering.  `:width` is a character-cell maximum and `chop` clips at that
-maximum; no padded or formatted string is retained.
+An item template accepts bounded literal text and its declared item parameter's
+`(ui-field item field-name)` bindings in this increment. `ui-text` and
+`ui-date` stream output while rendering. `:width` is a character-cell maximum
+and `chop` clips at that maximum; no padded or formatted string is retained.
 
 ### `ui-text`
 
-`ui-text` streams its `ui-field` value as text while rendering.  It accepts the
-bounded text options defined by the template grammar, including `:width` and
-`:overflow chop` in this increment.
+`ui-text` streams either a string literal or its `ui-field` value as text while
+rendering. A literal uses `(ui-text "text")`; it is copied once into bounded,
+immutable template metadata and emitted in declaration order for every item.
+A field form accepts the bounded text options defined by the template grammar,
+including `:width` and `:overflow chop` in this increment.
 
 ### `ui-date`
 
