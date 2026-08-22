@@ -1,4 +1,4 @@
-# Proposed UI API: bounded templates and lists
+# Proposed UI API: templates and bounded lists
 
 **Status:** proposed API for the next UI implementation phase.  This is the
 normative contract for the small fixed-layout surface described here; the
@@ -119,7 +119,7 @@ is `todo-item`.
   (ui-text (ui-field item status) :width 6  :overflow chop))
 ```
 
-An item template accepts bounded literal text and its declared item parameter's
+An item template accepts literal text and its declared item parameter's
 `(ui-field item field-name)` bindings in this increment. `ui-text` and
 `ui-date` stream output while rendering. `:width` is a character-cell maximum
 and `chop` clips at that maximum; no padded or formatted string is retained.
@@ -127,8 +127,11 @@ and `chop` clips at that maximum; no padded or formatted string is retained.
 ### `ui-text`
 
 `ui-text` streams either a string literal or its `ui-field` value as text while
-rendering. A literal uses `(ui-text "text")`; it is copied once into bounded,
-immutable template metadata and emitted in declaration order for every item.
+rendering. A literal uses `(ui-text "text")`; it is copied once into
+exact-length, immutable template-owned storage and emitted in declaration order
+for every item. Templates do not impose a public instruction-count or literal-
+length cap: declaration allocates exactly the descriptor count and string bytes
+required by the form.
 A field form accepts the bounded text options defined by the template grammar,
 including `:width` and `:overflow chop` in this increment.
 
@@ -237,7 +240,7 @@ For a store-backed list, no application watch is required solely to repaint it:
   :error "To-dos unavailable.")
 ```
 
-## 5. Lifecycle and fixed capacity profile
+## 5. Lifecycle and capacity profile
 
 ### `ui-unmount`
 
@@ -251,7 +254,8 @@ Releasing a list also removes its internally owned StoreRef/row watches.
 Releasing a UiRef invalidates its ID by incrementing its generation, so stale
 template handles are rejected rather than reused.  Stopping or reloading an
 app performs this cleanup automatically, including mounts, templates, UiRefs,
-internal watches, and their GC roots.
+internal watches, their GC roots, dynamically allocated instruction arrays,
+and template-owned literal strings.
 
 The first implementation uses these compile-time capacities per app:
 
@@ -260,16 +264,28 @@ The first implementation uses these compile-time capacities per app:
 | UiRefs | 16 | declaration signals `ui-capacity` |
 | record types | 8 | declaration signals `ui-capacity` |
 | templates, including lists | 12 | declaration signals `ui-capacity` |
-| instructions per template | 24 | declaration signals `ui-capacity` |
+| instructions per template | dynamically allocated; no API cap | declaration fails atomically if native allocation fails |
 | mounts | 8 | `ui-mount` signals `ui-capacity` |
 | StoreRef watch entries owned by lists | 16 (two per store list) | list declaration signals `ui-capacity` |
 | visible rows per list (`:limit`) | 5 | declaration rejects the limit |
-| state/literal text per instruction | 48 bytes | declaration rejects the text |
+| list state text | 48 bytes in the first implementation | declaration rejects the text |
+| `ui-text` literal text | exact-length dynamic allocation; no API cap | declaration fails atomically if native allocation fails |
 | temporary formatted field output | 32 bytes | formatter clips and reports a render error |
 
-These are hard bounds, not starting allocation sizes.  API calls validate all
-limits before reserving entries; a capacity failure leaves the existing UI
-unchanged.
+Fixed capacities in this table are hard bounds, not starting allocation sizes.
+`ui-template` is the exception: it validates a complete declaration into
+temporary, dynamically owned storage, then publishes the immutable template in
+one step. Failure releases every candidate descriptor and string, leaving the
+existing UI unchanged.
+
+Removing the two per-template caps does not make template resource use free or
+literally infinite. Developers must keep declarations moderate: instruction
+descriptors consume native memory, literal bytes consume native memory, and
+each instruction adds work to every rendered row. Available memory, allocation
+fragmentation, uLisp's ability to hold the declaration, and the source/store
+transport can still reject or prevent a very large form. Platform profiles may
+diagnose or budget those risks, but they must not introduce a public semantic
+limit on instruction count or `ui-text` literal length.
 
 ## Non-goals of this increment
 

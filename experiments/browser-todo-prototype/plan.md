@@ -33,10 +33,12 @@ the stable from-any-directory Bash entry points for building and testing.
   64-row limit and its test proves the ready status, bounded row count,
   indexed row-field read, and old pending status without exposing the backing
   association-list representation.
-- The bound template now also begins each visible row with template-owned
-  literal text via `(ui-text "TODO:")`, before its existing description and
-  status fields. Literal and field text share one fixed three-instruction
-  descriptor capacity; the app source remains within its 64-row limit.
+- The bound template begins each visible row with template-owned literal text
+  via `(ui-text "TODO:")`, before its existing description and status fields.
+  Its runtime metadata now owns an exact-size dynamically allocated instruction
+  array and exact-length literal strings; there is no per-template instruction
+  or `ui-text` literal cap. The imported source path remains independently
+  bounded to 64 rows, 255 bytes per source row, and 4096 bytes per file.
 - Leave `stash@{0}` (`codex-migration-pre-sync-2026-08-22`) and the unrelated
   untracked `.vscode/` directory untouched.
 

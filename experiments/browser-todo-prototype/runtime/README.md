@@ -17,7 +17,7 @@ experiment's clean FreeRTOS and uLisp vendor trees. It then:
 6. delivers one later-turn `app-initialise` event, copies and redelivers two
    app-owned `poke` payloads without retaining Lisp pointers, and proves that
    binding and mounting occur only in the application's requested stages; and
-7. declares a bounded UiRef/item-template/list/mount with `ui-bind`, `ui-type`,
+7. declares a UiRef/item-template/bounded-list/mount with `ui-bind`, `ui-type`,
    `ui-template`, `ui-template-list`, `ui-field`, and `ui-text`, then renders
    template-owned literal text followed by both fields for each imported to-do
    after the StoreRef reaches ready, alongside the
@@ -67,6 +67,16 @@ and 4096 bytes per input file. CSV accepts LF or CRLF records, quoted commas,
 and doubled quotes; it rejects malformed quotes, lone CR, quoted line breaks,
 NUL bytes, unsupported extensions, and all capacity overflows.
 
+The item-template implementation has no instruction-count or `ui-text`
+literal-length cap. A successful `ui-template` declaration owns one exact-size
+native instruction allocation plus one exact-size allocation for each literal.
+The candidate is validated completely before publication; failure frees all
+candidate storage. App cleanup/reload frees every installed literal and then
+the instruction array. This demonstrates dynamic ownership, not infinite
+resources: native memory exhaustion/fragmentation, uLisp heap pressure, and the
+independent startup importer limits above remain practical risks. Field-name,
+field-output, list-window, and list-state-text bounds remain unchanged.
+
 The entry registers two deliberately different callbacks. `store-watch`
 is the documented storage callback: it receives `(live old-value)` only after
 the live StoreRef has changed. `app-start` separately retains an app-level
@@ -102,6 +112,14 @@ bash ./experiments/browser-todo-prototype/view-browser.sh
 It calls `build.sh`, serves only on `127.0.0.1:8765`, and prints
 the URL to open. Pass a different local port as the first argument if needed;
 use Ctrl-C to stop and clean up the server.
+
+For template experiments, edit `runtime/store-init/apps/todo/src/main.lisp`,
+stop an already running `view-browser.sh` with Ctrl-C, and run it again. It
+invokes `build.sh`, so `test.sh` is optional while experimenting. Refresh the
+printed URL after the rebuild; use a hard refresh if an already-open tab still
+shows the prior JavaScript/Wasm/data bundle. The committed proof deliberately
+keeps its original three instructions (`TODO:`, description, status), so the
+normal CTest remains a stable baseline rather than a synthetic capacity demo.
 
 The page loads adjacent Emscripten JavaScript, WASM, and preloaded data files.
 When its StoreRef becomes ready, `#silos-todo-list` contains the two bound rows.

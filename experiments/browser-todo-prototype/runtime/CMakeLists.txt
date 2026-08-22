@@ -101,10 +101,10 @@ std::size_t SilosBoundStart = 0;
 std::size_t SilosBoundCount = 0;
 
 // This is intentionally a small real template registry, not a Todo-specific
-// print path. It contains identifiers and bounded ordered instructions only;
-// values remain in the uLisp StoreRef and are streamed during a Shell redraw.
+// print path. A declaration owns an exact-size instruction array and each
+// literal instruction owns an exact-size immutable string. Values remain in
+// the uLisp StoreRef and are streamed during a Shell redraw.
 constexpr std::size_t SilosUiTypeFieldCapacity = 3;
-constexpr std::size_t SilosUiInstructionCapacity = 3;
 struct SilosUiTypeField {
   char name[InMemoryFieldNameCapacity]{};
   int slot = -1;
@@ -116,14 +116,14 @@ enum class SilosUiInstructionKind {
 struct SilosUiInstruction {
   SilosUiInstructionKind kind = SilosUiInstructionKind::LiteralText;
   char name[InMemoryFieldNameCapacity]{};
-  char literal[PokeStringCapacity]{};
+  char *literal = nullptr;
   int width = 0;
 };
 object *SilosUiSourceRef = NULL;
 char SilosUiTypeName[InMemoryFieldNameCapacity]{};
 SilosUiTypeField SilosUiTypeFields[SilosUiTypeFieldCapacity]{};
 std::size_t SilosUiTypeFieldCount = 0;
-SilosUiInstruction SilosUiInstructions[SilosUiInstructionCapacity]{};
+SilosUiInstruction *SilosUiInstructions = nullptr;
 std::size_t SilosUiInstructionCount = 0;
 bool SilosUiTypeDeclared = false;
 bool SilosUiRefDeclared = false;
@@ -138,6 +138,49 @@ int SilosUiListHandle = 0;
 char SilosUiPendingText[PokeStringCapacity]{};
 char SilosUiEmptyText[PokeStringCapacity]{};
 char SilosUiErrorText[PokeStringCapacity]{};
+
+void silos_release_ui_instructions(SilosUiInstruction *instructions,
+                                   std::size_t count) {
+  if (instructions == nullptr) return;
+  for (std::size_t index = 0; index < count; ++index) {
+    delete[] instructions[index].literal;
+    instructions[index].literal = nullptr;
+  }
+  delete[] instructions;
+}
+
+SilosUiInstruction *silos_allocate_ui_instructions(std::size_t count) {
+  if (count == 0 || count > SIZE_MAX / sizeof(SilosUiInstruction)) return nullptr;
+  return new (std::nothrow) SilosUiInstruction[count];
+}
+
+void silos_copy_ui_literal_unchecked(object *source, char *destination) {
+  // Preflight has already established that SOURCE is a valid Lisp string and
+  // that DESTINATION has exactly stringlength(SOURCE) + 1 bytes. Copying the
+  // packed character cells directly keeps this post-allocation phase free of
+  // checkstring/error2 longjmps.
+  source = cdr(source);
+  std::size_t index = 0;
+  while (source != nil) {
+    const int characters = source->integer;
+    for (int shift = (sizeof(int) - 1) * 8; shift >= 0; shift -= 8) {
+      const char character = static_cast<char>((characters >> shift) & 0xFF);
+      if (character != '\0') destination[index++] = character;
+    }
+    source = car(source);
+  }
+  destination[index] = '\0';
+}
+
+bool silos_ui_list_length(object *list, std::size_t &length) {
+  length = 0;
+  while (list != nil) {
+    if (!consp(list) || length == SIZE_MAX) return false;
+    ++length;
+    list = rest(list);
+  }
+  return true;
+}
 
 // Refs are ordinary, compact association lists in this experiment. The typed
 // StoreRef and StoreRowRef accessors below are the only application-facing
@@ -591,6 +634,53 @@ bool silos_ui_is_declared_field(object *field) {
   return false;
 }
 
+bool silos_ui_copy_declared_field_name_unchecked(object *field, char *name) {
+  // Validation has already proved FIELD belongs to the declared type. Match
+  // against that type's stored C names and copy one of those names, avoiding
+  // printsymbol (and its error path) after native allocation begins.
+  for (std::size_t index = 0; index < SilosUiTypeFieldCount; ++index) {
+    if (silos_symbol_is(field, SilosUiTypeFields[index].name)) {
+      std::snprintf(name, InMemoryFieldNameCapacity, "%s",
+                    SilosUiTypeFields[index].name);
+      return true;
+    }
+  }
+  return false;
+}
+
+bool silos_ui_template_preflight(object *specs, const char *item_parameter,
+                                 std::size_t instruction_count) {
+  std::size_t visited = 0;
+  while (specs != nil) {
+    object *spec = first(specs);
+    std::size_t spec_length = 0;
+    if (!consp(spec) || !silos_ui_list_length(spec, spec_length) ||
+        !silos_symbol_name_is(first(spec), "ui-text")) return false;
+    if (spec_length == 2 && stringp(second(spec))) {
+      const int literal_length = stringlength(second(spec));
+      // The allocation expression adds one signed byte for the terminator.
+      // Reject INT_MAX before that addition can overflow.
+      if (literal_length < 0 || literal_length == INT_MAX) return false;
+    } else {
+      std::size_t field_length = 0;
+      if (spec_length != 6 || !consp(second(spec)) ||
+          !silos_ui_list_length(second(spec), field_length) || field_length != 3 ||
+          !silos_symbol_name_is(first(second(spec)), "ui-field") ||
+          !silos_symbol_name_is(second(second(spec)), item_parameter) ||
+          !silos_ui_is_declared_field(third(second(spec))) ||
+          !silos_symbol_name_is(third(spec), ":width") ||
+          !integerp(second(cddr(spec))) ||
+          !silos_symbol_name_is(first(cddr(cddr(spec))), ":overflow") ||
+          !silos_symbol_name_is(second(cddr(cddr(spec))), "chop")) return false;
+      const int width = checkinteger(second(cddr(spec)));
+      if (width < 1 || width > 32) return false;
+    }
+    ++visited;
+    specs = rest(specs);
+  }
+  return visited == instruction_count;
+}
+
 bool silos_ui_is_list_of_declared_type(object *declaration) {
   return consp(declaration) && listlength(declaration) == 2 &&
       silos_symbol_name_is(first(declaration), "list-of") &&
@@ -670,43 +760,59 @@ object *fn_uitemplate (object *args, object *env) {
   if (!silos_copy_symbol_name(first(second(args)), item_parameter,
                               sizeof(item_parameter))) error2("invalid ui item parameter");
   args = cddr(args);
+  std::size_t instruction_count = 0;
+  if (!silos_ui_list_length(args, instruction_count) || instruction_count == 0) {
+    error2("empty ui item template");
+  }
+  // All Lisp inspection, symbol printing, and value checks finish before the
+  // first native allocation. uLisp errors use longjmp, so native ownership
+  // must not exist while any of those operations can still signal.
+  if (!silos_ui_template_preflight(args, item_parameter, instruction_count)) {
+    error2("invalid ui instruction");
+  }
+  SilosUiInstruction *candidate = silos_allocate_ui_instructions(
+      instruction_count);
+  if (candidate == nullptr) error2("ui template allocation failed");
+  std::size_t candidate_count = 0;
   while (args != nil) {
     object *spec = first(args);
-    if (!consp(spec) || SilosUiInstructionCount == SilosUiInstructionCapacity ||
-        !silos_symbol_name_is(first(spec), "ui-text")) {
-      error2("invalid ui instruction");
-    }
-    SilosUiInstruction &instruction =
-        SilosUiInstructions[SilosUiInstructionCount];
-    if (listlength(spec) == 2 && stringp(second(spec))) {
-      cstring(second(spec), instruction.literal, sizeof(instruction.literal));
+    SilosUiInstruction &instruction = candidate[candidate_count];
+    if (stringp(second(spec))) {
+      const int literal_length = stringlength(second(spec));
+      const std::size_t allocation_size =
+          static_cast<std::size_t>(literal_length) + 1U;
+      instruction.literal = new (std::nothrow) char[allocation_size];
+      if (instruction.literal == nullptr) {
+        silos_release_ui_instructions(candidate, instruction_count);
+        error2("ui template allocation failed");
+      }
+      silos_copy_ui_literal_unchecked(second(spec), instruction.literal);
       instruction.kind = SilosUiInstructionKind::LiteralText;
-      SilosUiLiteralDeclared = true;
-      ++SilosUiInstructionCount;
-      args = rest(args);
-      continue;
+    } else {
+      const bool copied = silos_ui_copy_declared_field_name_unchecked(
+          third(second(spec)), instruction.name);
+      if (!copied) {
+        // Preflight proved this match. A mismatch is an internal invariant
+        // failure, not a Lisp validation error; release ownership explicitly
+        // because uLisp's longjmp-based error path is forbidden here.
+        silos_release_ui_instructions(candidate, instruction_count);
+        std::abort();
+      }
+      instruction.kind = SilosUiInstructionKind::FieldText;
+      instruction.width = second(cddr(spec))->integer;
     }
-    if (listlength(spec) != 6 || !consp(second(spec)) ||
-        listlength(second(spec)) != 3 ||
-        !silos_symbol_name_is(first(second(spec)), "ui-field") ||
-        !silos_symbol_name_is(second(second(spec)), item_parameter) ||
-        !silos_ui_is_declared_field(third(second(spec))) ||
-        !silos_symbol_name_is(third(spec), ":width") ||
-        !integerp(second(cddr(spec))) ||
-        !silos_symbol_name_is(first(cddr(cddr(spec))), ":overflow") ||
-        !silos_symbol_name_is(second(cddr(cddr(spec))), "chop")) {
-      error2("invalid ui field text");
-    }
-    if (!silos_copy_symbol_name(third(second(spec)),
-                                instruction.name,
-                                InMemoryFieldNameCapacity)) error2("ui field too long");
-    instruction.kind = SilosUiInstructionKind::FieldText;
-    instruction.width = checkinteger(second(cddr(spec)));
-    if (instruction.width < 1 || instruction.width > 32) error2("invalid ui field width");
-    ++SilosUiInstructionCount;
+    ++candidate_count;
     args = rest(args);
   }
-  if (SilosUiInstructionCount == 0) error2("empty ui item template");
+  // Publish only after every descriptor and literal allocation validated.
+  // A failure above releases the candidate and leaves the registry unchanged.
+  SilosUiInstructions = candidate;
+  SilosUiInstructionCount = candidate_count;
+  for (std::size_t index = 0; index < candidate_count; ++index) {
+    if (candidate[index].kind == SilosUiInstructionKind::LiteralText) {
+      SilosUiLiteralDeclared = true;
+    }
+  }
   SilosUiItemTemplateDeclared = true;
   SilosUiTemplateHandle = 2;
   return number(SilosUiTemplateHandle);
@@ -869,12 +975,25 @@ void silos_dispatch_shell_event(const ShellEvent &event) {
 // expose a Reload button yet. It prevents old roots or a queued poke from
 // leaking into the next app generation when bootstrap/reload is added.
 void silos_cleanup_active_app() {
+  silos_release_ui_instructions(SilosUiInstructions, SilosUiInstructionCount);
+  SilosUiInstructions = nullptr;
+  SilosUiInstructionCount = 0;
   SilosActiveHandler = nil;
   SilosBoundStoreRef = nil;
   SilosBoundStoreWatch = nil;
   SilosUiSourceRef = nil;
   SilosPokePending = false;
   SilosUiMounted = false;
+  SilosUiTypeFieldCount = 0;
+  SilosUiTypeDeclared = false;
+  SilosUiRefDeclared = false;
+  SilosUiItemTemplateDeclared = false;
+  SilosUiListDeclared = false;
+  SilosUiLiteralDeclared = false;
+  SilosUiLiteralRendered = false;
+  SilosUiRefHandle = 0;
+  SilosUiTemplateHandle = 0;
+  SilosUiListHandle = 0;
   xQueueReset(ShellRequestQueue);
   xQueueReset(ShellEventQueue);
 }

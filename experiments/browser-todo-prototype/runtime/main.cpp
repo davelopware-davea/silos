@@ -1,11 +1,13 @@
 #include "arduino_compat.hpp"
 
+#include <climits>
 #include <cstdint>
 #include <ctime>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iterator>
+#include <new>
 
 #include <emscripten.h>
 

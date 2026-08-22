@@ -589,3 +589,43 @@ working directory while protecting an existing non-Emscripten build?
 
 Does the user approve the current Browser result at the visual-check gate
 before the `store-row-add` record and validation decision begins?
+
+## 2026-08-22 - Dynamic item-template storage
+
+### Question
+
+Can item templates remove the prototype's fixed three-instruction and 48-byte
+literal buffers while retaining explicit, reload-safe ownership?
+
+### Method
+
+- Replaced the global instruction array with one exact-size native allocation
+  made after counting a `ui-template` declaration.
+- Replaced each instruction's inline literal buffer with an exact-length,
+  immutable allocation owned by that instruction.
+- Built the complete candidate before publishing it. Invalid forms or failed
+  allocations release candidate literals and descriptors, so no partial
+  template becomes visible.
+- Extended active-app cleanup to release installed literal strings and their
+  instruction array, then clear UI declaration state for a later reload.
+- Kept the committed Lisp proof at its original `TODO:`, description, status
+  shape rather than adding a synthetic capacity fixture.
+
+### Observed result
+
+- The configured Emscripten build and CTest completed successfully (1/1),
+  retaining the normal one-app, three-instruction proof. The
+  Bash wrappers were not invoked in this agent environment because its `bash`
+  command resolves to an unavailable WSL service; they still drive these same
+  CMake/CTest paths for the user.
+- The implementation contains no instruction-count constant or inline literal
+  character array. Remaining practical limits come from available native/uLisp
+  memory and the independently bounded startup source transport (64 rows, 255
+  bytes per row, and 4096 bytes per file in this experiment).
+- Browser visual verification retained the two ready rows in the order
+  `TODO:`, description, status.
+
+### Next question
+
+Does the user approve the unchanged visible result before `store-row-add`
+record validation begins?
