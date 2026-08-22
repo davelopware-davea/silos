@@ -412,3 +412,35 @@ input/store mutation?
 What Lisp record representation and validation should `store-row-add` require
 before separately delegated create/edit/delete phases, each verified through
 this browser-visible bound-template surface?
+
+## 2026-08-22 - Repeatable Browser visual-check launcher
+
+### Question
+
+Can each experiment phase provide the same safe, manual path for inspecting
+the current Browser proof before subsequent work begins?
+
+### Method
+
+- Added `view-browser.sh`, a Bash entry point that rebuilds the existing
+  configured Emscripten build, requires the staged `browser-surface.html`, and
+  serves the build directory with Python 3 on `127.0.0.1` only.
+- Made absent build configuration and missing Python explicit failures with
+  setup guidance. The server remains foregrounded until Ctrl-C and is cleaned
+  up by a shell trap.
+- Recorded a per-phase visual-check pause and script-maintenance rule in the
+  experiment plan.
+
+### Observed result
+
+- The launcher introduces no runtime/UI behavior; it only exposes the existing
+  staged Browser surface through a repeatable local URL.
+- `bash -n view-browser.sh` passed; the launcher rebuilt the configured target
+  and returned HTTP 200 for `browser-surface.html`. CTest passed 1/1 in 0.32
+  seconds, and a live Browser DOM/visual check showed the existing two bound
+  template rows with their expected field values.
+
+### Next question
+
+What record representation and validation should `store-row-add` use before
+the first editable-store phase, which must again end at this visual-check gate?

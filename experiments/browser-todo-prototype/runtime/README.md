@@ -78,10 +78,21 @@ cmake --build experiments/browser-todo-prototype/build
 ctest --test-dir experiments/browser-todo-prototype/build --output-on-failure
 ```
 
-Open `experiments/browser-todo-prototype/build/browser-surface.html` through a
-local web server (the page loads the adjacent Emscripten JavaScript, WASM, and
-preloaded data files). When its StoreRef becomes ready, `#silos-todo-list`
-contains the two bound rows. Each row's `.silos-template-field` elements retain
-the declared field name in `data-field` and display the template-width-chopped
-value. The page is a one-way display adapter: it does not handle input or call
-back into the Store.
+To rebuild and view the current Browser proof, run this from a Bash environment
+(such as Git Bash or WSL) after its Emscripten build has been configured:
+
+```bash
+bash ./experiments/browser-todo-prototype/view-browser.sh
+```
+
+It rebuilds the configured build, serves only on `127.0.0.1:8765`, and prints
+the URL to open. Pass a different local port as the first argument if needed;
+use Ctrl-C to stop and clean up the server. If no configured Browser build
+exists, the script prints the required `emcmake cmake` command instead of
+silently configuring a non-Browser build.
+
+The page loads adjacent Emscripten JavaScript, WASM, and preloaded data files.
+When its StoreRef becomes ready, `#silos-todo-list` contains the two bound rows.
+Each row's `.silos-template-field` elements retain the declared field name in
+`data-field` and display the template-width-chopped value. The page is a
+one-way display adapter: it does not handle input or call back into the Store.

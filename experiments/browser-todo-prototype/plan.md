@@ -3,6 +3,8 @@
 **Status:** In progress; the Browser boot/load, read-only StoreRef, bounded
 lifecycle/poke/UI-model, and browser-visible template-rendering proofs are
 complete. The `store-row-add` representation and validation decision is next.
+Each phase pauses after its Browser visual check so the user can run
+`view-browser.sh` before the next phase begins.
 
 **Project context:** [SilOS plan](../../docs/design/SilOS_PLAN.md).
 
@@ -68,6 +70,8 @@ and delete to-do items, and persists those items across restart.
    of scope for this proof.
 6. **[done]** Render the bounded bound-template list on a real Browser surface
    and verify that the two imported rows are visibly template-driven.
+   `view-browser.sh` rebuilds and serves the configured proof on loopback for
+   this check.
 7. **[next]** Decide and document the Lisp record representation and
    validation for `store-row-add`.
 8. **[planned]** Implement create, edit, and delete in separately delegated
@@ -75,6 +79,15 @@ and delete to-do items, and persists those items across restart.
 9. **[planned]** Add persistence and restart behaviour.
 10. Test and measure live binding, source-loading, handlers, references, and
    storage; record where their APIs need refinement.
+
+## Browser visual-check gate
+
+- At the end of every future experiment phase, update `view-browser.sh` and its
+  visual-check guidance when the build output or proof surface changes, then
+  pause before the next phase for the user to run the script and inspect it.
+- The script must rebuild the configured Emscripten build and serve the staged
+  `browser-surface.html` on loopback only; it is the stable manual viewing
+  entry point, not a second runtime or UI path.
 
 ## Current bootstrap subset
 
