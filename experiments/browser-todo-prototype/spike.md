@@ -444,3 +444,45 @@ the current Browser proof before subsequent work begins?
 
 What record representation and validation should `store-row-add` use before
 the first editable-store phase, which must again end at this visual-check gate?
+
+## 2026-08-22 - UI and Store accessor vocabulary migration
+
+### Question
+
+Can the Browser proof adopt the agreed public UI and typed Store accessor names
+without exposing its temporary association-list representation or changing the
+bounded rendering/lifecycle behaviour?
+
+### Method
+
+- Replaced the prototype-only UI declarations with `ui-type`, `ui-bind`,
+  `ui-template`, and `ui-template-list`; template instructions now use
+  `ui-text` and `ui-field`.
+- Replaced the test app's nested `field`/`car` traversal with `store-status`,
+  `store-row-count`, `store-row-at`, and `store-row-field`. The runtime now
+  exposes the complete documented StoreRef and StoreRowRef accessor family,
+  validating ref kind and ready/readable state before exposing values.
+- Kept the old pending snapshot's nil result an internal CTest assertion:
+  `store-value` correctly rejects a pending ref, so the app proof observes the
+  old pending status while native test code verifies the bounded snapshot
+  value is nil.
+- Rebuilt with Emscripten, ran CTest, then launched `view-browser.sh` on
+  loopback and inspected the generated DOM and Browser surface.
+
+### Observed result
+
+- CTest passed: `1/1` in `0.32` seconds. The test still reports one
+  pending-to-ready watch, both app stages, and the preserved pending/nil old
+  snapshot.
+- The launcher rebuilt successfully and served `browser-surface.html` at
+  `http://127.0.0.1:8767/browser-surface.html`. The Browser reached
+  `data-state="ready"` and visibly rendered the two bound rows with the same
+  ordered `desc`/`status` fields; the first description remained chopped at
+  32 characters.
+- The app source is now 62 rows, within the fixed 64-row limit. No vendor
+  files or browser adapter behaviour changed.
+
+### Next question
+
+What record representation and validation should `store-row-add` use before
+the first editable-store phase, which must again end at this visual-check gate?

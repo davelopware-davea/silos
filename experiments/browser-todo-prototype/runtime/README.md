@@ -10,15 +10,18 @@ experiment's clean FreeRTOS and uLisp vendor trees. It then:
 4. streams and evaluates the declared entry store; and
 5. proves that `store-bind` returns pending first, then the uLisp task receives
    a bounded completion, snapshots the old pending ref, exposes ready
-   StoreRowRefs, and invokes one `store-ref-watch` callback on the uLisp task;
+   StoreRowRefs, and invokes one `store-ref-watch` callback on the uLisp task
+   using the public `store-status`, `store-row-count`, `store-row-at`, and
+   `store-row-field` accessors;
    and
 6. delivers one later-turn `app-initialise` event, copies and redelivers two
    app-owned `poke` payloads without retaining Lisp pointers, and proves that
    binding and mounting occur only in the application's requested stages; and
-7. declares a bounded UiRef/item-template/list/mount and renders both imported
-   to-dos after the StoreRef reaches ready, alongside the watch's ready status,
-   bound-row count, named `desc` field read, and preserved pending/nil old
-   snapshot; and
+7. declares a bounded UiRef/item-template/list/mount with `ui-bind`, `ui-type`,
+   `ui-template`, `ui-template-list`, `ui-field`, and `ui-text`, then renders
+   both imported to-dos after the StoreRef reaches ready, alongside the
+   watch's ready status, bounded-row count, named `desc` field read, and
+   preserved pending/nil old snapshot; and
 8. projects those renderer-resolved list fields into the `#silos-app` Browser
    DOM surface without adding input handling or a browser-to-store path.
 
@@ -32,7 +35,9 @@ need the later linked-list head/next-row ordering model.
 
 This is deliberately a read-only StoreRef experiment. It does not yet define
 Lisp record literals or implement row creation, updates, deletion, semantic
-input, or persistence.
+input, or persistence. Its public Lisp source never traverses StoreRef or
+StoreRowRef `meta`/`value` records directly; those compact association lists
+remain runtime-private behind the typed Store accessors.
 
 `InMemoryStoreBackend.{h,cpp}` contains the experiment-owned, fixed-capacity
 catalogue. Every store has the same generic row representation: stable `id`

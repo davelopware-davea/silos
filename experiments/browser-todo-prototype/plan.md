@@ -26,6 +26,12 @@ Each phase pauses after its Browser visual check so the user can run
   prove browser todo lifecycle and UI binding`. The imported Lisp source has
   63 rows, within its fixed 64-row limit; no vendor files have changed. CTest
   passed in `C:\Users\dave\src\SilOS` in 0.80 seconds.
+- The current API-consistency increment replaces the prototype-only `defui*`
+  names and generic `field` traversal with the approved `ui-*`, `store-*`,
+  and `store-row-*` vocabulary. Its 62-row source remains within the fixed
+  64-row limit and its test proves the ready status, bounded row count,
+  indexed row-field read, and old pending status without exposing the backing
+  association-list representation.
 - Leave `stash@{0}` (`codex-migration-pre-sync-2026-08-22`) and the unrelated
   untracked `.vscode/` directory untouched.
 

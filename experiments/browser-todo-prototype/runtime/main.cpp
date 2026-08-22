@@ -273,6 +273,9 @@ void complete_store_bind(const StorageCompletion &completion) {
   object *old_snapshot = silos_snapshot_store_ref(SilosBoundStoreRef);
   protect(old_snapshot);
   StoreRefWatchOldSnapshotCreated = true;
+  object *old_value = silos_find_field(old_snapshot, "value");
+  configASSERT(old_value != nil);
+  StoreRefWatchObservedOldValueNil = cdr(old_value) == nil;
 
   cdr(value) = silos_make_store_row_refs(*store, SilosBoundFieldNames,
                                           SilosBoundFieldCount, SilosBoundStart,
@@ -393,6 +396,10 @@ void client_task(void *) {
   // duration. This makes the pending-to-ready proof deterministic.
   bool bind_ready = false;
   configASSERT(xQueueReceive(BindReadyQueue, &bind_ready, portMAX_DELAY) == pdPASS);
+  // The readiness notification is intentionally sent after the StoreRef watch
+  // but before the next Shell turn. Give that independently queued stage a
+  // bounded chance to run before this test-only client decides the proof.
+  for (int ticks = 0; ticks < 20 && !AppObservedStageTwo; ++ticks) vTaskDelay(1);
   const bool observed_description = std::strcmp(
       StoreRefWatchObservedDescription,
       "Learn how SilOS loads Lisp from a store") == 0;

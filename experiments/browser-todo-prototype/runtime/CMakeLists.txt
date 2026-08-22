@@ -53,13 +53,22 @@ const char doc_appdeclare[] = "(app-declare :name string :ideal-width integer :i
 const char doc_appstart[] = "(app-start handler)\nRegisters the current app event handler.";
 const char doc_storebind[] = "(store-bind name fields start count)\nReturns a live StoreRef whose rows become ready asynchronously.";
 const char doc_storerefwatch[] = "(store-ref-watch store-ref handler)\nCalls handler with live and old StoreRef values after a top-level ref change.";
-const char doc_field[] = "(field record name)\nReads one named field from a StoreRef, StoreRowRef, or its metadata/value record.";
+const char doc_storestatus[] = "(store-status store-ref)\nReads a StoreRef operation status.";
+const char doc_storeerror[] = "(store-error store-ref)\nReads a StoreRef error.";
+const char doc_storevalue[] = "(store-value store-ref)\nReads a ready StoreRef result.";
+const char doc_storerowcount[] = "(store-row-count store-ref)\nCounts rows in a ready bound StoreRef.";
+const char doc_storerowat[] = "(store-row-at store-ref index)\nReads a row from a ready bound StoreRef.";
+const char doc_storerowid[] = "(store-row-id store-row-ref)\nReads a StoreRowRef stable ID.";
+const char doc_storerowrevision[] = "(store-row-revision store-row-ref)\nReads a StoreRowRef revision.";
+const char doc_storerowstatus[] = "(store-row-status store-row-ref)\nReads a StoreRowRef status.";
+const char doc_storerowerror[] = "(store-row-error store-row-ref)\nReads a StoreRowRef error.";
+const char doc_storerowfield[] = "(store-row-field store-row-ref field)\nReads an application field from a ready StoreRowRef.";
 
 const char doc_apppoke[] = "(app-request-poke arg...)";
-const char doc_defuitype[] = "(defuitype name (field type slot)...)";
-const char doc_defui[] = "(defui name type value)";
-const char doc_defuitemplate[] = "(defuitemplate name (item type) (str (field item field) :width integer :overflow chop)...)";
-const char doc_defuilist[] = "(defuilist name :source ui-ref :item-template template :offset integer :limit integer :pending string :empty string :error string)";
+const char doc_uitype[] = "(ui-type name (field type slot)...)";
+const char doc_uibind[] = "(ui-bind name type value)";
+const char doc_uitemplate[] = "(ui-template name (item type) (ui-text (ui-field item field) :width integer :overflow chop)...)";
+const char doc_uitemplatelist[] = "(ui-template-list name :source ui-ref :item-template template :offset integer :limit integer :pending string :empty string :error string)";
 const char doc_uimount[] = "(ui-mount list :region region)";
 
 // The initial bootstrap deliberately trusts its one manifest.  It reads the
@@ -121,9 +130,9 @@ char SilosUiPendingText[PokeStringCapacity]{};
 char SilosUiEmptyText[PokeStringCapacity]{};
 char SilosUiErrorText[PokeStringCapacity]{};
 
-// Refs are ordinary, compact association lists in this experiment. FIELD is
-// the sole application-facing accessor, so a later packed representation need
-// not change the Lisp source that uses it.
+// Refs are ordinary, compact association lists in this experiment. The typed
+// StoreRef and StoreRowRef accessors below are the only application-facing
+// view, so a later packed representation need not change Lisp source.
 bool silos_symbol_is (object *value, const char *name) {
   if (!symbolp(value)) return false;
   // uLisp stores ordinary six-character-or-shorter symbols in its packed
@@ -321,14 +330,123 @@ object *silos_make_store_row_refs (const InMemoryStore &store,
   return rows;
 }
 
-object *fn_field (object *args, object *env) {
+object *silos_store_ref_metadata(object *ref) {
+  object *metadata = silos_find_field(ref, "meta");
+  if (metadata == nil || silos_find_field(cdr(metadata), "operation") == nil ||
+      silos_find_field(cdr(metadata), "status") == nil ||
+      silos_find_field(cdr(metadata), "error") == nil ||
+      silos_find_field(ref, "value") == nil) error2("invalid StoreRef");
+  return cdr(metadata);
+}
+
+object *silos_store_row_metadata(object *row) {
+  object *metadata = silos_find_field(row, "meta");
+  if (metadata == nil || silos_find_field(cdr(metadata), "id") == nil ||
+      silos_find_field(cdr(metadata), "revision") == nil ||
+      silos_find_field(cdr(metadata), "status") == nil ||
+      silos_find_field(cdr(metadata), "error") == nil ||
+      silos_find_field(row, "value") == nil) error2("invalid StoreRowRef");
+  return cdr(metadata);
+}
+
+object *silos_store_ref_status(object *ref) {
+  object *status = silos_find_field(silos_store_ref_metadata(ref), "status");
+  return cdr(status);
+}
+
+object *silos_store_row_status(object *row) {
+  object *status = silos_find_field(silos_store_row_metadata(row), "status");
+  return cdr(status);
+}
+
+object *silos_store_ref_ready_value(object *ref) {
+  if (!silos_symbol_is(silos_store_ref_status(ref), "ready")) error2("StoreRef is not ready");
+  object *value = silos_find_field(ref, "value");
+  return cdr(value);
+}
+
+object *silos_store_bound_rows(object *ref) {
+  object *metadata = silos_store_ref_metadata(ref);
+  object *operation = silos_find_field(metadata, "operation");
+  if (!silos_symbol_is(cdr(operation), "bind")) error2("StoreRef does not contain bound rows");
+  object *rows = silos_store_ref_ready_value(ref);
+  if (rows != nil && !consp(rows)) error2("invalid bound StoreRef rows");
+  return rows;
+}
+
+object *fn_storestatus (object *args, object *env) {
   (void) env;
-  object *key = second(args);
+  return silos_store_ref_status(first(args));
+}
+
+object *fn_storeerror (object *args, object *env) {
+  (void) env;
+  object *error = silos_find_field(silos_store_ref_metadata(first(args)), "error");
+  return cdr(error);
+}
+
+object *fn_storevalue (object *args, object *env) {
+  (void) env;
+  return silos_store_ref_ready_value(first(args));
+}
+
+object *fn_storerowcount (object *args, object *env) {
+  (void) env;
+  return number(listlength(silos_store_bound_rows(first(args))));
+}
+
+object *fn_storerowat (object *args, object *env) {
+  (void) env;
+  int index = checkinteger(second(args));
+  if (index < 0) error2("StoreRowRef index is negative");
+  object *rows = silos_store_bound_rows(first(args));
+  while (index > 0 && rows != nil) {
+    rows = rest(rows);
+    --index;
+  }
+  if (rows == nil) error2("StoreRowRef index out of bounds");
+  object *row = first(rows);
+  (void) silos_store_row_metadata(row);
+  return row;
+}
+
+object *fn_storerowid (object *args, object *env) {
+  (void) env;
+  object *id = silos_find_field(silos_store_row_metadata(first(args)), "id");
+  return cdr(id);
+}
+
+object *fn_storerowrevision (object *args, object *env) {
+  (void) env;
+  object *revision = silos_find_field(silos_store_row_metadata(first(args)), "revision");
+  return cdr(revision);
+}
+
+object *fn_storerowstatus (object *args, object *env) {
+  (void) env;
+  return silos_store_row_status(first(args));
+}
+
+object *fn_storerowerror (object *args, object *env) {
+  (void) env;
+  object *error = silos_find_field(silos_store_row_metadata(first(args)), "error");
+  return cdr(error);
+}
+
+object *fn_storerowfield (object *args, object *env) {
+  (void) env;
+  object *row = first(args);
+  if (!silos_symbol_is(silos_store_row_status(row), "ready") &&
+      !silos_symbol_is(silos_store_row_status(row), "saving")) {
+    error2("StoreRowRef fields are not readable");
+  }
   char name[InMemoryFieldNameCapacity];
+  object *key = second(args);
   if (!silos_copy_symbol_name(key, name, sizeof(name)))
-    error("field name is not a supported symbol", key);
-  object *entry = silos_find_field(first(args), name);
-  if (entry == nil) error2("unknown field");
+    error("StoreRowRef field name is not a supported symbol", key);
+  object *value = silos_find_field(row, "value");
+  object *entry = silos_find_field(cdr(value), name);
+  if (entry == nil) error2("unknown StoreRowRef field");
   return cdr(entry);
 }
 
@@ -467,7 +585,7 @@ bool silos_ui_is_store_ref_list_of_declared_type(object *declaration) {
       silos_ui_is_list_of_declared_type(second(declaration));
 }
 
-object *fn_defuitype (object *args, object *env) {
+object *fn_uitype (object *args, object *env) {
   (void) env;
   if (SilosUiTypeDeclared || !symbolp(first(args))) error2("invalid ui type");
   const int field_count = listlength(cdr(args));
@@ -508,7 +626,7 @@ object *fn_defuitype (object *args, object *env) {
   return number(1);
 }
 
-object *fn_defui (object *args, object *env) {
+object *fn_uibind (object *args, object *env) {
   if (SilosUiRefDeclared || !symbolp(first(args)) ||
       !silos_ui_is_store_ref_list_of_declared_type(second(args))) {
     error2("invalid ui source");
@@ -521,7 +639,7 @@ object *fn_defui (object *args, object *env) {
   return number(SilosUiRefHandle);
 }
 
-object *fn_defuitemplate (object *args, object *env) {
+object *fn_uitemplate (object *args, object *env) {
   (void) env;
   if (!SilosUiTypeDeclared || SilosUiItemTemplateDeclared || !symbolp(first(args)) ||
       !consp(second(args)) || listlength(second(args)) != 2 ||
@@ -537,9 +655,9 @@ object *fn_defuitemplate (object *args, object *env) {
     object *spec = first(args);
     if (!consp(spec) || listlength(spec) != 6 ||
         SilosUiFieldCount == SilosUiFieldCapacity ||
-        !silos_symbol_name_is(first(spec), "str") || !consp(second(spec)) ||
+        !silos_symbol_name_is(first(spec), "ui-text") || !consp(second(spec)) ||
         listlength(second(spec)) != 3 ||
-        !silos_symbol_name_is(first(second(spec)), "field") ||
+        !silos_symbol_name_is(first(second(spec)), "ui-field") ||
         !silos_symbol_name_is(second(second(spec)), item_parameter) ||
         !silos_ui_is_declared_field(third(second(spec))) ||
         !silos_symbol_name_is(third(spec), ":width") ||
@@ -562,7 +680,7 @@ object *fn_defuitemplate (object *args, object *env) {
   return number(SilosUiTemplateHandle);
 }
 
-object *fn_defuilist (object *args, object *env) {
+object *fn_uitemplatelist (object *args, object *env) {
   // This special form receives the public declarative keyword spelling intact.
   // In uLisp's builtin arity encoding, a maximum of seven means an unbounded
   // tail, so the compact implementation does not require a public alternate.
@@ -736,9 +854,8 @@ void silos_cleanup_active_app() {
 object *fn_silostestwatchobservation (object *args, object *env) {
   (void) env;
   object *old_status = first(cdr(cdr(cdr(args))));
-  object *old_value = first(cdr(cdr(cdr(cdr(args)))));
   if (!silos_symbol_is(first(args), "ready") || checkinteger(second(args)) != 2 ||
-      !silos_symbol_is(old_status, "pending") || old_value != nil) {
+      !silos_symbol_is(old_status, "pending")) {
     error2("unexpected StoreRef watch observation");
   }
   cstring(checkstring(third(args)), StoreRefWatchObservedDescription,
@@ -747,7 +864,6 @@ object *fn_silostestwatchobservation (object *args, object *env) {
   StoreRefWatchObservedReady = true;
   StoreRefWatchObservedCount = true;
   StoreRefWatchObservedOldPending = true;
-  StoreRefWatchObservedOldValueNil = true;
   return tee;
 }
 
@@ -783,25 +899,7 @@ string(REPLACE
 )
 string(REPLACE
   "  { \":output\", (fn_ptr_type)OUTPUT, PINMODE, NULL },\n};"
-  "  { \":output\", (fn_ptr_type)OUTPUT, PINMODE, NULL },\n  { \"app-declare\", fn_appdeclare, 0207, doc_appdeclare },\n  { \"app-start\", fn_appstart, 0211, doc_appstart },\n  { \"app-request-poke\", fn_apppoke, 0207, doc_apppoke },\n  { \"field\", fn_field, 0222, doc_field },\n  { \"store-bind\", fn_storebind, 0244, doc_storebind },\n  { \"store-ref-watch\", fn_storerefwatch, 0222, doc_storerefwatch },\n  { \"defuitype\", fn_defuitype, 0222, doc_defuitype },\n  { \"defui\", fn_defui, 0233, doc_defui },\n  { \"defuitemplate\", fn_defuitemplate, 0227, doc_defuitemplate },\n  { \"defuilist\", fn_defuilist, 0327, doc_defuilist },\n  { \"ui-mount\", fn_uimount, 0233, doc_uimount },\n  { \"silos-test-watch-observation\", fn_silostestwatchobservation, 0255, NULL },\n  { \"silos-test-app-stage\", fn_silostestappstage, 0211, NULL },\n};"
-  ULISP_GENERATED_SOURCE
-  "${ULISP_GENERATED_SOURCE}"
-)
-string(REPLACE
-  "{ \"defuitype\", fn_defuitype, 0222, doc_defuitype }"
-  "{ \"defuitype\", fn_defuitype, 0327, doc_defuitype }"
-  ULISP_GENERATED_SOURCE
-  "${ULISP_GENERATED_SOURCE}"
-)
-string(REPLACE
-  "{ \"defui\", fn_defui, 0233, doc_defui }"
-  "{ \"defui\", fn_defui, 0333, doc_defui }"
-  ULISP_GENERATED_SOURCE
-  "${ULISP_GENERATED_SOURCE}"
-)
-string(REPLACE
-  "{ \"defuitemplate\", fn_defuitemplate, 0227, doc_defuitemplate }"
-  "{ \"defuitemplate\", fn_defuitemplate, 0327, doc_defuitemplate }"
+  "  { \":output\", (fn_ptr_type)OUTPUT, PINMODE, NULL },\n  { \"app-declare\", fn_appdeclare, 0207, doc_appdeclare },\n  { \"app-start\", fn_appstart, 0211, doc_appstart },\n  { \"app-request-poke\", fn_apppoke, 0207, doc_apppoke },\n  { \"store-bind\", fn_storebind, 0244, doc_storebind },\n  { \"store-status\", fn_storestatus, 0211, doc_storestatus },\n  { \"store-error\", fn_storeerror, 0211, doc_storeerror },\n  { \"store-value\", fn_storevalue, 0211, doc_storevalue },\n  { \"store-row-count\", fn_storerowcount, 0211, doc_storerowcount },\n  { \"store-row-at\", fn_storerowat, 0222, doc_storerowat },\n  { \"store-row-id\", fn_storerowid, 0211, doc_storerowid },\n  { \"store-row-revision\", fn_storerowrevision, 0211, doc_storerowrevision },\n  { \"store-row-status\", fn_storerowstatus, 0211, doc_storerowstatus },\n  { \"store-row-error\", fn_storerowerror, 0211, doc_storerowerror },\n  { \"store-row-field\", fn_storerowfield, 0222, doc_storerowfield },\n  { \"store-ref-watch\", fn_storerefwatch, 0222, doc_storerefwatch },\n  { \"ui-type\", fn_uitype, 0327, doc_uitype },\n  { \"ui-bind\", fn_uibind, 0333, doc_uibind },\n  { \"ui-template\", fn_uitemplate, 0327, doc_uitemplate },\n  { \"ui-template-list\", fn_uitemplatelist, 0327, doc_uitemplatelist },\n  { \"ui-mount\", fn_uimount, 0233, doc_uimount },\n  { \"silos-test-watch-observation\", fn_silostestwatchobservation, 0244, NULL },\n  { \"silos-test-app-stage\", fn_silostestappstage, 0211, NULL },\n};"
   ULISP_GENERATED_SOURCE
   "${ULISP_GENERATED_SOURCE}"
 )

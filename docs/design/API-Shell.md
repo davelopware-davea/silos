@@ -16,6 +16,14 @@ which an app normally receives storage and network changes.
 The proposed [UI API](API-UI.md) defines the bounded templates, UiRefs, lists,
 and mounts that the Shell renders from those live values.
 
+| Public form | Purpose |
+| --- | --- |
+| [`app-declare`](#app-declare) | Describe an app to the Shell in restricted declaration mode. |
+| [`app-start`](#app-start) | Register the active app's bounded event handler. |
+| [`app-request-poke`](#app-request-poke) | Request one later-turn application-defined poke event. |
+| [`require`](#require) | Load a shared system API module once. |
+| [`import`](#import) | Load an app-private source module as a factory or bounded export. |
+
 ## Contents
 
 1. [Model](#model)
@@ -108,7 +116,9 @@ the uLisp task. The task clears/prepares the active app workspace, streams the
 entry store through the uLisp reader using a bounded input buffer, and evaluates
 it.
 
-The entry source initialises state and finishes by registering an app instance:
+The entry source initialises state and finishes by registering an app instance.
+
+### `app-start`
 
 ```lisp
 (app-start
@@ -150,6 +160,8 @@ event for that app.  It is delivered on a later uLisp event turn, never by
 calling the handler synchronously from `app-start`.  A stopped or reloaded app
 does not receive an event from its former generation; a new successful
 registration receives its own one `app-initialise` event.
+
+### `app-request-poke`
 
 An app may ask the Shell to schedule one later-turn event with:
 
@@ -218,9 +230,13 @@ Two provisional source-loading forms have distinct roles:
 (import "apps/todo/src/model")       ; app-private source module
 ```
 
+### `require`
+
 `require` loads a shared system library once into deliberately global API
 names. It uses a bounded module catalogue mapping library names to stores, and
 must detect cycles and avoid repeat loads.
+
+### `import`
 
 `import` is a proposed native primitive for app-private source. Its store
 evaluates to a factory closure or bounded export value instead of top-level

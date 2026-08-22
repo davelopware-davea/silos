@@ -9,6 +9,20 @@ not decided by this document.
 [fixed-layout to-do example](Discussion-FreeRTOS-uLisp-Variable-UI-Binding.md#fixed-layout-to-do-example),
 and [Store API](API-BoundQueueStore.md).
 
+| Public form | Purpose |
+| --- | --- |
+| [`ui-bind`](#ui-bind) | Bind one uLisp global to a stable UI-facing UiRef. |
+| [`ui-type`](#ui-type) | Declare an immutable fixed-layout record descriptor. |
+| [`ui-template`](#ui-template) | Declare a reusable typed item template. |
+| [`ui-template-list`](#ui-template-list) | Declare a bounded visible-window list template. |
+| [`ui-field`](#ui-field) | Read a declared item field within a UI template. |
+| [`ui-text`](#ui-text) | Stream a text field while rendering a UI template. |
+| [`ui-date`](#ui-date) | Stream a formatted date field while rendering a UI template. |
+| [`ui-mount`](#ui-mount) | Place a template or list in a Shell-defined region. |
+| [`ui-invalidate`](#ui-invalidate) | Mark views depending on a UiRef dirty. |
+| [`ui-unmount`](#ui-unmount) | Remove one mount. |
+| [`ui-release`](#ui-release) | Release an unused UI resource. |
+
 ## 1. Model and ownership
 
 The UI has four distinct objects:
@@ -30,15 +44,17 @@ Shell refresh obtains synchronised read access to the workspace and streams
 current values directly into the framebuffer; it neither retains pointers into
 the Lisp heap nor creates persistent formatted-value copies.
 
-`defui` defines the named uLisp global and returns its stable UiRef.  The
+### `ui-bind`
+
+`ui-bind` defines the named uLisp global and returns its stable UiRef.  The
 ordinary global remains usable by Lisp code; the returned value is what UI
 declarations use.
 
 ```lisp
 ;; `headline` is an ordinary global value.  `headline-ui` is its one UiRef.
-;; A second template must reuse headline-ui, not call defui again for headline.
+;; A second template must reuse headline-ui, not call ui-bind again for headline.
 (defvar headline-ui
-  (defui headline string "Starting..."))
+  (ui-bind headline string "Starting..."))
 ```
 
 The accepted declared types in this increment are `string`, `integer`,
@@ -48,8 +64,10 @@ and renders the applicable error state; it must not reinterpret memory.
 
 ## 2. Fixed-layout record types
 
+### `ui-type`
+
 ```lisp
-(defuitype todo-item
+(ui-type todo-item
   ;; Field names are compile-time names.  Slot numbers are the actual array
   ;; layout, so an item can be a normal three-element uLisp array.
   (desc   string   0)
@@ -57,13 +75,13 @@ and renders the applicable error state; it must not reinterpret memory.
   (status string   2))
 ```
 
-`defuitype` registers an immutable type descriptor.  Slots must be unique,
+`ui-type` registers an immutable type descriptor.  Slots must be unique,
 non-negative, contiguous, and start at zero.  Thus the example requires an
-array of exactly three elements.  `field` in a matching item template compiles
+array of exactly three elements.  `ui-field` in a matching item template compiles
 to the numeric slot, not a symbol lookup.
 
 ```lisp
-;; The application may use ordinary uLisp arrays; defuitype does not make a
+;; The application may use ordinary uLisp arrays; ui-type does not make a
 ;; wrapper object.  Keep these names beside the type declaration so imperative
 ;; code and declarative templates agree on the fixed layout.
 (defvar todo-desc-slot   0)
@@ -78,7 +96,9 @@ to the numeric slot, not a symbol lookup.
     item))
 ```
 
-For a plain record item, `(field item status)` means `(aref item 2)`.  For a
+### `ui-field`
+
+For a plain record item, `(ui-field item status)` means `(aref item 2)`.  For a
 `StoreRowRef`, it means the matching field in that row's live `value` record;
 StoreRowRef identity, revision, status, and error remain metadata and are not
 record fields.  A list whose declared item type is `todo-item` therefore may
@@ -87,34 +107,46 @@ is `todo-item`.
 
 ## 3. Templates, lists, and mounting
 
-### Item templates
+### `ui-template`
 
 ```lisp
-(defuitemplate todo-row (item todo-item)
+(ui-template todo-row (item todo-item)
   ;; `item` is a transient parameter supplied once per visible row.  It does
   ;; not allocate a variable or retain the current record after the refresh.
-  (str  (field item desc)   :width 16 :overflow chop)
-  (date (field item target) :format "yyyy-mm-dd")
-  (str  (field item status) :width 6  :overflow chop))
+  (ui-text (ui-field item desc)   :width 16 :overflow chop)
+  (ui-date (ui-field item target) :format "yyyy-mm-dd")
+  (ui-text (ui-field item status) :width 6  :overflow chop))
 ```
 
-An item template accepts only its declared item parameter and `(field item
-field-name)` bindings in this increment.  `str` and `date` stream output while
-rendering.  `:width` is a character-cell maximum and `chop` clips at that
+An item template accepts only its declared item parameter and `(ui-field item
+field-name)` bindings in this increment.  `ui-text` and `ui-date` stream output
+while rendering.  `:width` is a character-cell maximum and `chop` clips at that
 maximum; no padded or formatted string is retained.
 
-### Fixed-window lists
+### `ui-text`
+
+`ui-text` streams its `ui-field` value as text while rendering.  It accepts the
+bounded text options defined by the template grammar, including `:width` and
+`:overflow chop` in this increment.
+
+### `ui-date`
+
+`ui-date` streams its `ui-field` value using its required `:format` option.
+The accepted date representation and the complete formatter grammar remain
+deferred.
+
+### `ui-template-list`
 
 ```lisp
 ;; The value begins as an ordinary list.  `todos-ui` is still the source even
 ;; after application code replaces `todos` with another correctly typed list.
 (defvar todos-ui
-  (defui todos (list-of todo-item)
+  (ui-bind todos (list-of todo-item)
     (list (make-todo "Buy milk"     20260809 "to do")
           (make-todo "Write report" 20260810 "in progress")
           (make-todo "Call the bank" 20260812 "to do"))))
 
-(defuilist todo-list
+(ui-template-list todo-list
   :source todos-ui
   :item-template todo-row
   :offset 0
@@ -142,6 +174,8 @@ owned by the list template.  Row-level StoreRowRef failure is rendered by the
 row's field formatter as an invalid value; this increment does not add a
 per-row error template.
 
+### `ui-mount`
+
 `ui-mount` returns a mount handle.  A template or list may have multiple
 mounts, each with its own region; each mount renders the same live source.
 
@@ -155,7 +189,7 @@ changes without a subscription per item.
 
 The following events mark every mount that depends on the UiRef dirty:
 
-1. assigning the global created by `defui` (which advances the UiRef revision);
+1. assigning the global created by `ui-bind` (which advances the UiRef revision);
 2. `(ui-invalidate UIREF)`, for a mutation below the global binding such as an
    `aref` slot update; and
 3. an internally owned StoreRef or StoreRowRef watch for a StoreRef list
@@ -176,16 +210,22 @@ start an unbounded watch chain.
 (ui-invalidate todos-ui)
 ```
 
+### `ui-invalidate`
+
+`ui-invalidate` marks every mount that depends on its UiRef dirty.  It is the
+application-visible operation for reporting an in-place mutation below a bound
+global; rendering still occurs later at the Shell's bounded refresh cadence.
+
 For a store-backed list, no application watch is required solely to repaint it:
 
 ```lisp
 ;; The returned StoreRef is the live list source.  The list API owns the
 ;; bounded StoreRef/row watches needed to schedule a later refresh.
 (defvar stored-todos-ui
-  (defui stored-todos (store-ref (list-of todo-item))
+  (ui-bind stored-todos (store-ref (list-of todo-item))
     (store-bind "todo/items" '(desc target status) 0 5)))
 
-(defuilist stored-todo-list
+(ui-template-list stored-todo-list
   :source stored-todos-ui
   :item-template todo-row
   :offset 0 :limit 5
@@ -196,7 +236,13 @@ For a store-backed list, no application watch is required solely to repaint it:
 
 ## 5. Lifecycle and fixed capacity profile
 
-`ui-unmount` removes one mount.  `ui-release` releases a UiRef, template, or
+### `ui-unmount`
+
+`ui-unmount` removes one mount.
+
+### `ui-release`
+
+`ui-release` releases a UiRef, template, or
 list only when it has no dependent mounts; otherwise it signals an error.
 Releasing a list also removes its internally owned StoreRef/row watches.
 Releasing a UiRef invalidates its ID by incrementing its generation, so stale
@@ -241,7 +287,7 @@ unchanged.
 The discussion does not justify a definite choice for the following, so they
 are deliberately outside this API contract:
 
-- the exact reader/macro implementation of `defui`, `defuitype`, and template
+- the exact reader/macro implementation of `ui-bind`, `ui-type`, and template
   declarations, provided they expose the semantics above;
 - the complete formatter grammar (including date representation, padding, and
   an alternative to `chop`), and how render errors appear visually;

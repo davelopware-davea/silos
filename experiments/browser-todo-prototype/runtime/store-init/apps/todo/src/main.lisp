@@ -1,13 +1,13 @@
 ; These declarations are source-load-safe: they retain only bounded template
 ; metadata. They do not bind the StoreRef or mount a view while source loads.
-(defuitype todo-item (desc string 0) (status string 1))
+(ui-type todo-item (desc string 0) (status string 1))
 
 ; Each field directive names a typed row field and its bounded character width.
 ; The Shell owns this immutable description, never a current row value.
 (defvar todo-row
-  (defuitemplate todo-row (item todo-item)
-    (str (field item desc) :width 32 :overflow chop)
-    (str (field item status) :width 16 :overflow chop)))
+  (ui-template todo-row (item todo-item)
+    (ui-text (ui-field item desc) :width 32 :overflow chop)
+    (ui-text (ui-field item status) :width 16 :overflow chop)))
 
 ; APP-START is intentionally the final action during source evaluation. The
 ; Shell sends APP-INITIALISE later, after this closure has been registered.
@@ -33,23 +33,20 @@
                     ; Store changes belong to this watch, never to APP-START.
                     ; The test sink merely proves pending -> ready observation.
                     (silos-test-watch-observation
-                      (field (field live 'meta) 'status)
-                      (if (field live 'value) (length (field live 'value)) 0)
-                      (if (field live 'value)
-                          (field (field (car (field live 'value)) 'value) 'desc)
-                        nil)
-                      (field (field old-value 'meta) 'status)
-                      (field old-value 'value))))
-                ; DEFUI returns the stable UiRef handle for this live StoreRef.
+                      (store-status live)
+                      (store-row-count live)
+                      (store-row-field (store-row-at live 0) 'desc)
+                      (store-status old-value))))
+                ; UI-BIND returns the stable UiRef handle for this live StoreRef.
                 (defvar todo-items-ui
-                  (defui todo-items (store-ref (list-of todo-item)) todo-items))
+                  (ui-bind todo-items (store-ref (list-of todo-item)) todo-items))
                 (silos-test-app-stage 1)
                 (app-request-poke 'init 2)))
       ((and (listp event) (eq (car event) 'poke) (equal (car (cdr event)) 'init)
             (eq (car (cdr (cdr event))) 2))
        (progn
                   (defvar todo-list
-                    (defuilist todo-list
+                    (ui-template-list todo-list
                       :source todo-items-ui
                       :item-template todo-row
                       :offset 0
