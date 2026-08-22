@@ -1,8 +1,8 @@
 # Browser to-do prototype plan
 
 **Status:** In progress; the Browser boot/load, read-only StoreRef, and bounded
-lifecycle/poke/UI-list-render proofs are complete. The current lifecycle/UI/
-cross-reference work is uncommitted.
+lifecycle/poke/UI-model proofs are complete and checkpointed. Browser-visible
+template rendering is the next proof.
 
 **Project context:** [SilOS plan](../../docs/design/SilOS_PLAN.md).
 
@@ -21,17 +21,18 @@ cross-reference work is uncommitted.
   `app-initialise`, application-owned `init` stages, one StoreRef watch, and
   bounded UiRef/template/list/mount rendering of the two imported CSV rows.
 - Source UI forms now match the general [UI API](../../docs/design/API-UI.md).
-  The API-Shell lifecycle/poke amendment is currently uncommitted. The imported
-  Lisp source has 63 rows, within its fixed 64-row limit; no vendor files have
-  changed. CTest passed in `C:\Users\dave\src\SilOS` in 0.26 seconds.
+  The lifecycle/UI/cross-reference proof is checkpointed as `e146103 feat:
+  prove browser todo lifecycle and UI binding`. The imported Lisp source has
+  63 rows, within its fixed 64-row limit; no vendor files have changed. CTest
+  passed in `C:\Users\dave\src\SilOS` in 0.80 seconds.
 - Leave `stash@{0}` (`codex-migration-pre-sync-2026-08-22`) and the unrelated
   untracked `.vscode/` directory untouched.
 
-**Next session, without beginning it:** review the uncommitted
-lifecycle/UI/poke/cross-reference diff and make the next checkpoint commit;
-decide and document the Lisp record representation and validation for
-`store-row-add`; then implement create/edit/delete in separately delegated
-phases, followed by persistence and restart behaviour.
+**Next session, without beginning it:** render the bounded bound-template list
+on an actual Browser surface and verify the two imported rows are visibly
+template-driven. Only then decide and document the Lisp record representation
+and validation for `store-row-add`; implement create/edit/delete in separately
+delegated phases afterwards, followed by persistence and restart behaviour.
 
 ## Goal
 
@@ -67,12 +68,14 @@ and delete to-do items, and persists those items across restart.
    delivery, application-owned staged pokes, one StoreRef watch, and bounded
    templates/UiRefs/lists/mount are proven. Semantic input actions remain out
    of scope for this proof.
-6. **[next]** Decide and document the Lisp record representation and
+6. **[next]** Render the bounded bound-template list on a real Browser surface
+   and verify that the two imported rows are visibly template-driven.
+7. **[planned]** Decide and document the Lisp record representation and
    validation for `store-row-add`.
-7. **[planned]** Implement create, edit, and delete in separately delegated
+8. **[planned]** Implement create, edit, and delete in separately delegated
    phases.
-8. **[planned]** Add persistence and restart behaviour.
-9. Test and measure live binding, source-loading, handlers, references, and
+9. **[planned]** Add persistence and restart behaviour.
+10. Test and measure live binding, source-loading, handlers, references, and
    storage; record where their APIs need refinement.
 
 ## Current bootstrap subset
@@ -110,9 +113,10 @@ and delete to-do items, and persists those items across restart.
   removal and release on app stop/reload are still deferred.
 - After `app-start`, the Shell queues one later-turn `app-initialise` event.
   The app's generic two-stage poke sequence binds its StoreRef, then declares
-  and mounts the bounded StoreRef-backed to-do list. The proof renders both
-  imported rows through its UiRef and item-template metadata; it adds no
-  semantic input handling.
+  and mounts the bounded StoreRef-backed to-do list. The proof currently
+  renders both imported rows through its UiRef and item-template metadata to
+  the native diagnostic stream. Browser-visible output is its next separate
+  gate; it adds no semantic input handling.
 - This increment supports only `desc` and `status` field reads. It deliberately
   excludes row record literals, creation, updates, deletion, ordering,
   semantic input, and persistence.

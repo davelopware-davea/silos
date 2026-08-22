@@ -342,3 +342,33 @@ stale-checkout or vendor ambiguity?
 What schema-ordered Lisp record representation and validation should
 `store-row-add` require before separately delegated create/edit/delete phases,
 then persistence and restart behaviour?
+
+## 2026-08-22 - Browser-visible template-rendering gate
+
+### Question
+
+Does the completed bounded UI proof display its bound template on an actual
+Browser surface, and should editable-store work wait until that loop is
+visible?
+
+### Method
+
+- Inspected the checkpointed Browser target after `e146103 feat: prove browser
+  todo lifecycle and UI binding`, including its template renderer and build
+  target.
+- Distinguished the existing native template-render diagnostic from
+  Browser-surface output before choosing the next experiment phase.
+
+### Observed result
+
+- `silos_render_ui` streams the mounted list and template field values through
+  `std::printf`; it verifies the bounded UiRef/template/list path but creates
+  no DOM, canvas, or other visible Browser surface.
+- The lifecycle/UI checkpoint is cleanly committed. Its boot CTest passed in
+  0.80 seconds; `.vscode/` and the migration stash remain untouched.
+
+### Next question
+
+What is the smallest Browser surface adapter that can visibly render the
+existing two bound template rows while preserving the current bounded UI model
+and avoiding semantic input or store mutation?
