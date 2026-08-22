@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuild and serve the Browser to-do proof from a configured Emscripten build.
+# Build and serve the Browser to-do proof.
 set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,36 +12,7 @@ if [[ ! "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 1 || PORT > 65535 )); then
   exit 2
 fi
 
-if ! command -v cmake >/dev/null 2>&1; then
-  echo "error: cmake is required to rebuild the Browser proof." >&2
-  exit 1
-fi
-
-if [[ ! -f "$BUILD_DIR/CMakeCache.txt" ]]; then
-  cat >&2 <<EOF
-error: no configured Browser build exists at:
-  $BUILD_DIR
-
-Configure it from the repository root with:
-  emcmake cmake -S experiments/browser-todo-prototype/runtime \\
-    -B experiments/browser-todo-prototype/build -G Ninja
-EOF
-  exit 1
-fi
-
-if ! grep -qx 'EMSCRIPTEN:INTERNAL=1' "$BUILD_DIR/CMakeCache.txt"; then
-  cat >&2 <<EOF
-error: $BUILD_DIR is not configured as an Emscripten Browser build.
-
-Reconfigure it from the repository root with:
-  emcmake cmake -S experiments/browser-todo-prototype/runtime \\
-    -B experiments/browser-todo-prototype/build -G Ninja
-EOF
-  exit 1
-fi
-
-echo "Rebuilding Browser proof..."
-cmake --build "$BUILD_DIR"
+"$BASH" "$SCRIPT_DIR/build.sh"
 
 if [[ ! -f "$SURFACE" ]]; then
   echo "error: build completed but did not stage $SURFACE." >&2

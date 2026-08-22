@@ -76,26 +76,32 @@ interprets that app-owned stage data. Only one StoreRef watch is supported now,
 and its callback is rooted until the future app-stop/reload lifecycle releases
 it. There is no watch removal operation in this increment.
 
-Configure and test with:
+From any working directory, configure when needed and build with:
 
-```powershell
-emcmake cmake -S experiments/browser-todo-prototype/runtime -B experiments/browser-todo-prototype/build -G Ninja
-cmake --build experiments/browser-todo-prototype/build
-ctest --test-dir experiments/browser-todo-prototype/build --output-on-failure
+```bash
+bash /path/to/SilOS/experiments/browser-todo-prototype/build.sh
 ```
 
-To rebuild and view the current Browser proof, run this from a Bash environment
-(such as Git Bash or WSL) after its Emscripten build has been configured:
+`build.sh` activates no SDK itself: when first configuring, run it from a Bash
+environment (such as Git Bash or WSL) in which the Emscripten SDK has been
+activated and `emcmake`, CMake, and Ninja are on `PATH`. It refuses to overwrite
+an existing build configured with a non-Emscripten toolchain.
+
+Build and run CTest with:
+
+```bash
+bash /path/to/SilOS/experiments/browser-todo-prototype/test.sh
+```
+
+To build and view the current Browser proof:
 
 ```bash
 bash ./experiments/browser-todo-prototype/view-browser.sh
 ```
 
-It rebuilds the configured build, serves only on `127.0.0.1:8765`, and prints
+It calls `build.sh`, serves only on `127.0.0.1:8765`, and prints
 the URL to open. Pass a different local port as the first argument if needed;
-use Ctrl-C to stop and clean up the server. If no configured Browser build
-exists, the script prints the required `emcmake cmake` command instead of
-silently configuring a non-Browser build.
+use Ctrl-C to stop and clean up the server.
 
 The page loads adjacent Emscripten JavaScript, WASM, and preloaded data files.
 When its StoreRef becomes ready, `#silos-todo-list` contains the two bound rows.

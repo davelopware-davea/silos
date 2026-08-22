@@ -556,3 +556,36 @@ template, without embedding that text in the Browser adapter or row values?
 
 Does the user approve the literal-first Browser result at the visual-check
 gate before the `store-row-add` record and validation decision begins?
+
+## 2026-08-22 - Build and test Bash entry points
+
+### Question
+
+Can the experiment provide simple build and test commands that work from any
+working directory while protecting an existing non-Emscripten build?
+
+### Method
+
+- Added path-independent `build.sh` and `test.sh` launchers at the experiment
+  root. The build launcher configures with Emscripten and Ninja only when no
+  CMake cache exists, and rejects an existing non-Emscripten cache.
+- Changed `view-browser.sh` to use the same build launcher while retaining its
+  loopback-only server and signal cleanup.
+- Kept the Browser visual-check gate unchanged.
+
+### Observed result
+
+- Bash syntax validation passed for all three launchers.
+- An initial `test.sh` run correctly exposed a concurrent experimental fourth
+  `ui-text` instruction exceeding the current three-slot template limit. After
+  the user identified that edit as disposable and it was removed, the same
+  path-independent invocation from `/tmp` rebuilt successfully and CTest
+  passed 1/1 in 0.26 seconds.
+- The configured-build validation path was exercised without removing or
+  replacing the experiment's existing build directory. Clean configuration and
+  non-Emscripten-cache rejection remain to be exercised in an isolated copy.
+
+### Next question
+
+Does the user approve the current Browser result at the visual-check gate
+before the `store-row-add` record and validation decision begins?
