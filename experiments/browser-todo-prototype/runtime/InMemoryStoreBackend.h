@@ -8,7 +8,9 @@
 // target it is intended to inform.
 constexpr std::size_t InMemoryStoreNameCapacity = 48;
 constexpr std::size_t InMemoryStoreCapacity = 8;
-constexpr std::size_t InMemoryRowsPerStoreCapacity = 40;
+// Source stores preserve one source line per row. 64 accommodates the
+// documented lifecycle/UI proof while remaining a fixed Browser/MCU bound.
+constexpr std::size_t InMemoryRowsPerStoreCapacity = 64;
 constexpr std::size_t InMemoryFieldsPerRowCapacity = 4;
 constexpr std::size_t InMemoryFieldNameCapacity = 16;
 constexpr std::size_t InMemoryFieldValueCapacity = 256;

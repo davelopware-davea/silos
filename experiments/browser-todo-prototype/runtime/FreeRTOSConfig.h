@@ -34,7 +34,9 @@ void vSilOSAssert(const char *file, int line);
 #define configUSE_TASK_NOTIFICATIONS 0
 #define configQUEUE_REGISTRY_SIZE 0
 #define configUSE_TIMERS 0
-#define configEMSCRIPTEN_MAX_TASKS 4U
+// uLisp, storage, Shell-event forwarding, client verification, and the idle
+// task are all deliberate fixed participants in this Browser proof.
+#define configEMSCRIPTEN_MAX_TASKS 5U
 #define configEMSCRIPTEN_ASYNCIFY_STACK_BYTES 16384U
 #define INCLUDE_vTaskDelay 1
 #define INCLUDE_vTaskDelete 1

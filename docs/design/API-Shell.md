@@ -13,6 +13,8 @@ interface.
 The companion [BoundQueueStore](API-BoundQueueStore.md) and
 [BoundQueueMQTT](API-BoundQueueMQTT.md) APIs define the live Refs through
 which an app normally receives storage and network changes.
+The proposed [UI API](API-UI.md) defines the bounded templates, UiRefs, lists,
+and mounts that the Shell renders from those live values.
 
 ## Contents
 
@@ -139,6 +141,51 @@ reactive work items. A change may enqueue more work, but must not create an
 unbounded synchronous watch chain. A FreeRTOS yield cannot switch to another
 app handler inside the same uLisp task, so multi-app fairness begins with short
 handlers and a bounded event queue.
+
+### Minimal lifecycle and poke event contract
+
+The first Shell event is deliberately small and explicit.  After a successful
+`app-start` registration, the Shell enqueues exactly one `app-initialise`
+event for that app.  It is delivered on a later uLisp event turn, never by
+calling the handler synchronously from `app-start`.  A stopped or reloaded app
+does not receive an event from its former generation; a new successful
+registration receives its own one `app-initialise` event.
+
+An app may ask the Shell to schedule one later-turn event with:
+
+```lisp
+(app-request-poke arg ...)
+```
+
+This is a **general**, variadic request: it has no Shell-native interpretation
+of its arguments.  On success the Shell copies its payload across the boundary
+and later calls the same app handler with a fresh event of this shape:
+
+```lisp
+(poke . payload)
+```
+
+where `payload` is the proper list of `arg ...`.  The tag `poke` is Shell
+owned; every payload convention is application owned.  In particular `init`
+and numeric stages have no native meaning and must not become lifecycle
+special cases.
+
+The initial bounded profile accepts only serialisable values: `nil`, booleans,
+integers, symbols, strings of at most 48 UTF-8 bytes, and proper nested lists
+of those values.  Lists have at most depth 4, at most 8 elements per list, and
+at most 16 values in the whole payload.  Symbols have at most 16 bytes.  The
+Shell stores a bounded flat native copy, then reconstructs fresh Lisp values for
+delivery.  It never puts a Lisp heap pointer, closure, Ref, array, or other
+runtime object in a native queue.
+
+There is one outstanding poke per app.  A second request before delivery fails
+deterministically with `poke-pending`; it does not overwrite or merge the
+first payload.  Accepted pokes retain FIFO order with other Shell events and
+are always delivered after the requesting handler returns.  If the bounded
+request or event queue is full, the request fails deterministically without
+leaving a pending flag.  Stopping or reloading an app removes queued lifecycle
+and poke events for its generation and clears its pending-poke state before
+releasing its handler and other roots.
 
 ## Reload
 

@@ -1,9 +1,37 @@
 # Browser to-do prototype plan
 
-**Status:** In progress; the Browser boot/load and read-only StoreRef proofs
-are complete.
+**Status:** In progress; the Browser boot/load, read-only StoreRef, and bounded
+lifecycle/poke/UI-list-render proofs are complete. The current lifecycle/UI/
+cross-reference work is uncommitted.
 
 **Project context:** [SilOS plan](../../docs/design/SilOS_PLAN.md).
+
+**Relevant API sketch:** [proposed UI API](../../docs/design/API-UI.md).
+
+## Current status and handoff
+
+- Work only in the authoritative `C:\Users\dave\src\SilOS` checkout, on
+  `codex/browser-todo-prototype`. A prior session accidentally continued in a
+  stale OneDrive checkout; its content was reconciled into `src` by
+  Git-normalised hashes and verified against committed history through
+  `d992ad6 design: add bounded UI API proposal`, plus the current uncommitted
+  lifecycle/UI/cross-reference work.
+- The proof has a general queue-backed `(app-request-poke arg...)` boundary
+  that delivers fresh `(poke . payload)` values, a later-turn
+  `app-initialise`, application-owned `init` stages, one StoreRef watch, and
+  bounded UiRef/template/list/mount rendering of the two imported CSV rows.
+- Source UI forms now match the general [UI API](../../docs/design/API-UI.md).
+  The API-Shell lifecycle/poke amendment is currently uncommitted. The imported
+  Lisp source has 63 rows, within its fixed 64-row limit; no vendor files have
+  changed. CTest passed in `C:\Users\dave\src\SilOS` in 0.26 seconds.
+- Leave `stash@{0}` (`codex-migration-pre-sync-2026-08-22`) and the unrelated
+  untracked `.vscode/` directory untouched.
+
+**Next session, without beginning it:** review the uncommitted
+lifecycle/UI/poke/cross-reference diff and make the next checkpoint commit;
+decide and document the Lisp record representation and validation for
+`store-row-add`; then implement create/edit/delete in separately delegated
+phases, followed by persistence and restart behaviour.
 
 ## Goal
 
@@ -35,11 +63,16 @@ and delete to-do items, and persists those items across restart.
 4. **[done]** Implement a read-only StoreRef-backed to-do data path using the
    same volatile in-memory backend: pending-to-ready bind completion, bounded
    old snapshots, row metadata, field reads, and one StoreRef watch.
-5. Implement the smallest useful Shell boundary: templates/UiRefs, semantic
-   input dispatch, and handlers.
-6. Add create, edit, delete, and restart
-   persistence.
-7. Test and measure live binding, source-loading, handlers, references, and
+5. **[done]** Implement the smallest useful Shell boundary: later lifecycle
+   delivery, application-owned staged pokes, one StoreRef watch, and bounded
+   templates/UiRefs/lists/mount are proven. Semantic input actions remain out
+   of scope for this proof.
+6. **[next]** Decide and document the Lisp record representation and
+   validation for `store-row-add`.
+7. **[planned]** Implement create, edit, and delete in separately delegated
+   phases.
+8. **[planned]** Add persistence and restart behaviour.
+9. Test and measure live binding, source-loading, handlers, references, and
    storage; record where their APIs need refinement.
 
 ## Current bootstrap subset
@@ -75,9 +108,14 @@ and delete to-do items, and persists those items across restart.
   separate, unused-in-this-proof app-level handler for future Shell events.
   This increment permits one rooted StoreRef watch for the active app; watch
   removal and release on app stop/reload are still deferred.
+- After `app-start`, the Shell queues one later-turn `app-initialise` event.
+  The app's generic two-stage poke sequence binds its StoreRef, then declares
+  and mounts the bounded StoreRef-backed to-do list. The proof renders both
+  imported rows through its UiRef and item-template metadata; it adds no
+  semantic input handling.
 - This increment supports only `desc` and `status` field reads. It deliberately
-  excludes row record literals, creation, updates, deletion, ordering, UI, and
-  persistence.
+  excludes row record literals, creation, updates, deletion, ordering,
+  semantic input, and persistence.
 
 ## Non-goals
 

@@ -316,6 +316,9 @@ Templates can display request state, errors, row metadata, and row values. UI
 input may deliberately modify a StoreRowRef, producing the two-way write path
 above.
 
+The proposed [UI API](API-UI.md) specifies the bounded UiRef, template, and
+fixed-window list contract for displaying these StoreRefs and StoreRowRefs.
+
 ## Deferred extensions
 
 - `store-search`, returning stable IDs matching a future query language;

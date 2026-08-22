@@ -27,6 +27,41 @@ namespace {
 constexpr std::size_t StoreNameCapacity = InMemoryStoreNameCapacity;
 constexpr configSTACK_DEPTH_TYPE ULispTaskStackBytes = 65536U;
 constexpr configSTACK_DEPTH_TYPE ClientTaskStackBytes = 32768U;
+constexpr std::size_t PokeStringCapacity = 49U;
+constexpr std::size_t PokeSymbolCapacity = 17U;
+constexpr std::size_t PokeListCapacity = 8U;
+constexpr std::size_t PokeValueCapacity = 16U;
+constexpr std::size_t PokeDepthCapacity = 4U;
+
+// ShellEvent is deliberately a native value arena, never a uLisp object graph.
+// Its fixed bounds are the lifecycle API's boundary contract, rather than an
+// incidental property of the Browser implementation. Nodes refer only to
+// bounded indices in this flat arena, so queue storage is finite and does not
+// rely on recursive C++ object layout.
+enum class SerializedValueKind { Nil, Boolean, Integer, Symbol, String, List };
+constexpr std::uint8_t InvalidSerializedValueIndex = PokeValueCapacity;
+struct SerializedValue {
+  SerializedValueKind kind = SerializedValueKind::Nil;
+  int integer = 0;
+  char text[PokeStringCapacity]{};
+  std::uint8_t children[PokeListCapacity]{};
+  std::uint8_t child_count = 0;
+};
+struct SerializedPayload {
+  SerializedValue values[PokeValueCapacity]{};
+  std::uint8_t value_count = 0;
+  std::uint8_t root = InvalidSerializedValueIndex;
+};
+enum class ShellEventKind { AppInitialise, Poke };
+struct ShellEvent {
+  ShellEventKind kind = ShellEventKind::AppInitialise;
+  std::uint32_t app_generation = 0;
+  SerializedPayload payload{};
+};
+struct ShellRequest {
+  std::uint32_t app_generation = 0;
+  SerializedPayload payload{};
+};
 
 struct AppDeclaration {
   char name[32];
@@ -52,6 +87,18 @@ bool AppStarted = false;
 QueueHandle_t StorageRequestQueue;
 QueueHandle_t StorageCompletionQueue;
 QueueHandle_t BindReadyQueue;
+QueueHandle_t ShellRequestQueue;
+QueueHandle_t ShellEventQueue;
+std::uint32_t ActiveAppGeneration = 0;
+bool AppInitialiseDelivered = false;
+int AppEventCount = 0;
+int AppPokeCount = 0;
+bool AppObservedNoBindBeforeInit = false;
+bool AppObservedStageOne = false;
+bool AppObservedStageTwo = false;
+bool AppObservedPokeFifo = false;
+bool UiPendingRendered = false;
+bool UiReadyRendered = false;
 const InMemoryStore *CurrentSource = nullptr;
 std::size_t CurrentRow = 0;
 std::size_t CurrentCharacter = 0;
@@ -67,7 +114,6 @@ bool StoreRefWatchObservedCount = false;
 bool StoreRefWatchObservedOldPending = false;
 bool StoreRefWatchObservedOldValueNil = false;
 char StoreRefWatchObservedDescription[InMemoryFieldValueCapacity]{};
-
 
 bool has_prefix(const char *text, const char *prefix) {
   return std::strncmp(text, prefix, std::strlen(prefix)) == 0;
@@ -188,6 +234,9 @@ void complete_store_bind(const StorageCompletion &completion) {
   ++StoreRefWatchInvocationCount;
   unprotect();
   StoreBindCompletedReady = true;
+  // The list's internally owned StoreRef dependency is a dirty notification,
+  // not the app's storage callback. Render only after the app watch returns.
+  silos_render_ui();
   std::printf("store-bind=%s status=ready watch=%d\n", completion.store_name,
               StoreRefWatchInvocationCount);
   const bool ready = true;
@@ -203,6 +252,13 @@ void process_storage_completions() {
   }
 }
 
+void process_one_shell_event() {
+  ShellEvent event{};
+  if (xQueueReceive(ShellEventQueue, &event, 0) == pdPASS) {
+    silos_dispatch_shell_event(event);
+  }
+}
+
 void storage_task(void *) {
   for (;;) {
     StorageRequest request{};
@@ -212,6 +268,20 @@ void storage_task(void *) {
     std::snprintf(completion.store_name, sizeof(completion.store_name), "%s",
                   request.store_name);
     configASSERT(xQueueSend(StorageCompletionQueue, &completion, portMAX_DELAY) == pdPASS);
+  }
+}
+
+void shell_task(void *) {
+  for (;;) {
+    ShellRequest request{};
+    configASSERT(xQueueReceive(ShellRequestQueue, &request, portMAX_DELAY) == pdPASS);
+    ShellEvent event{};
+    event.kind = ShellEventKind::Poke;
+    event.app_generation = request.app_generation;
+    event.payload = request.payload;
+    // The separate Shell task means a poke never re-enters the handler that
+    // requested it. Queue order is preserved byte-for-byte.
+    configASSERT(xQueueSend(ShellEventQueue, &event, portMAX_DELAY) == pdPASS);
   }
 }
 
@@ -241,6 +311,8 @@ bool bootstrap_apps() {
   SourceStores.visit([&](const InMemoryStore &store) {
     if (!is_app_manifest_name(store.name)) return;
     found_manifest = true;
+    silos_cleanup_active_app();
+    ++ActiveAppGeneration;
     CurrentDeclaration = AppDeclaration{};
     AppStarted = false;
     loaded = evaluate_source_store(store) && CurrentDeclaration.present && loaded;
@@ -259,6 +331,7 @@ void ulisp_task(void *) {
   configASSERT(booted);
   for (;;) {
     process_storage_completions();
+    process_one_shell_event();
     // One whole tick gives the cooperative Browser scheduler a yield point.
     // pdMS_TO_TICKS(1) rounds down to zero at this target's 100 Hz tick rate.
     vTaskDelay(1);
@@ -280,12 +353,24 @@ void client_task(void *) {
                       StoreRefWatchObservationCount == 1 &&
                       StoreRefWatchObservedReady && StoreRefWatchObservedCount &&
                       observed_description && StoreRefWatchObservedOldPending &&
-                      StoreRefWatchObservedOldValueNil;
+                      StoreRefWatchObservedOldValueNil && AppInitialiseDelivered &&
+                      AppObservedNoBindBeforeInit && AppObservedStageOne &&
+                      AppObservedStageTwo && AppObservedPokeFifo &&
+                      AppEventCount == 3 && AppPokeCount == 2 &&
+                      SilosUiTypeDeclared && SilosUiRefDeclared &&
+                      SilosUiItemTemplateDeclared && SilosUiListDeclared &&
+                      SilosUiMounted && UiReadyRendered;
   std::printf("store-ref-watch fired=%d ready=%s count=%s old=pending/%s\n",
               StoreRefWatchInvocationCount,
               StoreRefWatchObservedReady ? "yes" : "no",
               StoreRefWatchObservedCount ? "yes" : "no",
               StoreRefWatchObservedOldValueNil ? "nil" : "not-nil");
+  std::printf("app-events initialise=%s pokes=%d fifo=%s no-bind-before-init=%s stages=%s/%s\n",
+              AppInitialiseDelivered ? "yes" : "no", AppPokeCount,
+              AppObservedPokeFifo ? "yes" : "no",
+              AppObservedNoBindBeforeInit ? "yes" : "no",
+              AppObservedStageOne ? "one" : "missing",
+              AppObservedStageTwo ? "two" : "missing");
   std::puts(passed ? "SILOS_TODO_BOOT_PASS" : "SILOS_TODO_BOOT_FAIL");
   if (!passed) std::abort();
   vTaskEndScheduler();
@@ -313,11 +398,16 @@ int main() {
   StorageRequestQueue = xQueueCreate(1, sizeof(StorageRequest));
   StorageCompletionQueue = xQueueCreate(1, sizeof(StorageCompletion));
   BindReadyQueue = xQueueCreate(1, sizeof(bool));
+  ShellRequestQueue = xQueueCreate(4, sizeof(ShellRequest));
+  ShellEventQueue = xQueueCreate(4, sizeof(ShellEvent));
   configASSERT(StorageRequestQueue != nullptr);
   configASSERT(StorageCompletionQueue != nullptr);
   configASSERT(BindReadyQueue != nullptr);
+  configASSERT(ShellRequestQueue != nullptr);
+  configASSERT(ShellEventQueue != nullptr);
   configASSERT(xTaskCreate(ulisp_task, "ulisp", ULispTaskStackBytes, nullptr, 2, nullptr) == pdPASS);
   configASSERT(xTaskCreate(storage_task, "store", ULispTaskStackBytes, nullptr, 2, nullptr) == pdPASS);
+  configASSERT(xTaskCreate(shell_task, "shell", ULispTaskStackBytes, nullptr, 2, nullptr) == pdPASS);
   configASSERT(xTaskCreate(client_task, "client", ClientTaskStackBytes, nullptr, 2, nullptr) == pdPASS);
   vTaskStartScheduler();
   return 0;

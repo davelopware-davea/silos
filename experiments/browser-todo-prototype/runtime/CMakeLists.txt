@@ -50,6 +50,13 @@ const char doc_storebind[] = "(store-bind name fields start count)\nReturns a li
 const char doc_storerefwatch[] = "(store-ref-watch store-ref handler)\nCalls handler with live and old StoreRef values after a top-level ref change.";
 const char doc_field[] = "(field record name)\nReads one named field from a StoreRef, StoreRowRef, or its metadata/value record.";
 
+const char doc_apppoke[] = "(app-request-poke arg...)";
+const char doc_defuitype[] = "(defuitype name (field type slot)...)";
+const char doc_defui[] = "(defui name type value)";
+const char doc_defuitemplate[] = "(defuitemplate name (item type) (str (field item field) :width integer :overflow chop)...)";
+const char doc_defuilist[] = "(defuilist name :source ui-ref :item-template template :offset integer :limit integer :pending string :empty string :error string)";
+const char doc_uimount[] = "(ui-mount list :region region)";
+
 // The initial bootstrap deliberately trusts its one manifest.  It reads the
 // documented positional keyword/value shape and leaves manifest validation for
 // the later, bounded describe-mode experiment.
@@ -72,11 +79,42 @@ object *fn_appdeclare (object *args, object *env) {
 object *SilosActiveHandler = NULL;
 object *SilosBoundStoreRef = NULL;
 object *SilosBoundStoreWatch = NULL;
+bool SilosPokePending = false;
 char SilosBoundStoreName[StoreNameCapacity]{};
 char SilosBoundFieldNames[InMemoryFieldsPerRowCapacity][InMemoryFieldNameCapacity]{};
 std::size_t SilosBoundFieldCount = 0;
 std::size_t SilosBoundStart = 0;
 std::size_t SilosBoundCount = 0;
+
+// This is intentionally a small real template registry, not a Todo-specific
+// print path. It contains identifiers and bounded field descriptors only;
+// values remain in the uLisp StoreRef and are streamed during a Shell redraw.
+constexpr std::size_t SilosUiFieldCapacity = 3;
+struct SilosUiTypeField {
+  char name[InMemoryFieldNameCapacity]{};
+  int slot = -1;
+};
+struct SilosUiField {
+  char name[InMemoryFieldNameCapacity]{};
+  int width = 0;
+};
+object *SilosUiSourceRef = NULL;
+char SilosUiTypeName[InMemoryFieldNameCapacity]{};
+SilosUiTypeField SilosUiTypeFields[SilosUiFieldCapacity]{};
+std::size_t SilosUiTypeFieldCount = 0;
+SilosUiField SilosUiFields[SilosUiFieldCapacity]{};
+std::size_t SilosUiFieldCount = 0;
+bool SilosUiTypeDeclared = false;
+bool SilosUiRefDeclared = false;
+bool SilosUiItemTemplateDeclared = false;
+bool SilosUiListDeclared = false;
+bool SilosUiMounted = false;
+int SilosUiRefHandle = 0;
+int SilosUiTemplateHandle = 0;
+int SilosUiListHandle = 0;
+char SilosUiPendingText[PokeStringCapacity]{};
+char SilosUiEmptyText[PokeStringCapacity]{};
+char SilosUiErrorText[PokeStringCapacity]{};
 
 // Refs are ordinary, compact association lists in this experiment. FIELD is
 // the sole application-facing accessor, so a later packed representation need
@@ -94,6 +132,9 @@ bool silos_symbol_is (object *value, const char *name) {
 }
 
 object *silos_symbol (const char *name) {
+  if (std::strlen(name) <= 6 && valid40(const_cast<char *>(name))) {
+    return intern(twist(pack40(const_cast<char *>(name))));
+  }
   return internlong(const_cast<char *>(name));
 }
 
@@ -124,6 +165,12 @@ bool silos_copy_symbol_name (object *symbol, char name[], std::size_t capacity) 
   SilosPrintedSymbol[SilosPrintedSymbolLength] = '\0';
   std::snprintf(name, capacity, "%s", SilosPrintedSymbol);
   return true;
+}
+
+bool silos_symbol_name_is(object *value, const char *name) {
+  char value_name[InMemoryFieldNameCapacity]{};
+  return silos_copy_symbol_name(value, value_name, sizeof(value_name)) &&
+      std::strcmp(value_name, name) == 0;
 }
 
 object *silos_prepend_field (const char *name, object *value, object *tail) {
@@ -280,6 +327,283 @@ object *fn_field (object *args, object *env) {
   return cdr(entry);
 }
 
+// Copy one admissible Lisp value into a bounded flat native arena. The queue
+// therefore owns data, not a uLisp pointer which could be reclaimed or mutate
+// before the Shell's later delivery turn.
+bool silos_serialise_value(object *value, SerializedPayload &payload,
+                            std::size_t depth, std::uint8_t &index) {
+  if (depth > PokeDepthCapacity || payload.value_count == PokeValueCapacity) return false;
+  index = payload.value_count++;
+  SerializedValue &out = payload.values[index];
+  out = SerializedValue{};
+  if (value == nil) { out.kind = SerializedValueKind::Nil; return true; }
+  if (value == tee) { out.kind = SerializedValueKind::Boolean; return true; }
+  if (integerp(value)) {
+    out.kind = SerializedValueKind::Integer;
+    out.integer = value->integer;
+    return true;
+  }
+  if (symbolp(value)) {
+    out.kind = SerializedValueKind::Symbol;
+    return silos_copy_symbol_name(value, out.text, PokeSymbolCapacity);
+  }
+  if (stringp(value)) {
+    out.kind = SerializedValueKind::String;
+    cstring(value, out.text, sizeof(out.text));
+    return true;
+  }
+  if (!consp(value)) return false;
+  out.kind = SerializedValueKind::List;
+  out.child_count = 0;
+  while (value != nil) {
+    std::uint8_t child = InvalidSerializedValueIndex;
+    if (!consp(value) || out.child_count == PokeListCapacity ||
+        !silos_serialise_value(first(value), payload, depth + 1, child)) return false;
+    out.children[out.child_count] = child;
+    ++out.child_count;
+    value = rest(value);
+  }
+  return true;
+}
+
+object *silos_deserialise_value(const SerializedPayload &payload, std::uint8_t index) {
+  if (index >= payload.value_count) error2("invalid serial event");
+  const SerializedValue &value = payload.values[index];
+  switch (value.kind) {
+    case SerializedValueKind::Nil: return nil;
+    case SerializedValueKind::Boolean: return tee;
+    case SerializedValueKind::Integer: return number(value.integer);
+    case SerializedValueKind::Symbol: return silos_symbol(value.text);
+    case SerializedValueKind::String: return lispstring(const_cast<char *>(value.text));
+    case SerializedValueKind::List: {
+      object *result = nil;
+      for (std::size_t index = value.child_count; index > 0; --index) {
+        protect(result);
+        object *item = silos_deserialise_value(payload, value.children[index - 1]);
+        protect(item);
+        result = cons(item, result);
+        unprotect();
+        unprotect();
+      }
+      return result;
+    }
+  }
+  error2("invalid serial event");
+}
+
+void silos_render_ui() {
+  if (!SilosUiMounted || SilosUiSourceRef == nil) return;
+  object *metadata = silos_find_field(SilosUiSourceRef, "meta");
+  object *status = metadata == nil ? nil : silos_find_field(cdr(metadata), "status");
+  if (status == nil || silos_symbol_is(cdr(status), "pending")) {
+    std::printf("ui-list region=main state=pending text=%s\\n", SilosUiPendingText);
+    UiPendingRendered = true;
+    return;
+  }
+  if (!silos_symbol_is(cdr(status), "ready")) {
+    std::printf("ui-list region=main state=error text=%s\\n", SilosUiErrorText);
+    return;
+  }
+  object *value = silos_find_field(SilosUiSourceRef, "value");
+  object *rows = value == nil ? nil : cdr(value);
+  if (rows == nil) {
+    std::printf("ui-list region=main state=empty text=%s\\n", SilosUiEmptyText);
+    return;
+  }
+  std::printf("ui-list region=main state=ready\\n");
+  std::size_t row_index = 0;
+  while (rows != nil && row_index < 5) {
+    if (!consp(rows)) { std::printf("ui-list render-error=improper-rows\\n"); return; }
+    object *row_value = silos_find_field(first(rows), "value");
+    std::printf("ui-row index=%zu", row_index);
+    for (std::size_t field_index = 0; field_index < SilosUiFieldCount; ++field_index) {
+      object *field = row_value == nil ? nil : silos_find_field(cdr(row_value), SilosUiFields[field_index].name);
+      if (field == nil || !stringp(cdr(field))) {
+        std::printf(" %s=<invalid>", SilosUiFields[field_index].name);
+      } else {
+        char rendered[InMemoryFieldValueCapacity]{};
+        cstring(cdr(field), rendered, sizeof(rendered));
+        rendered[SilosUiFields[field_index].width < static_cast<int>(sizeof(rendered)) ?
+                 SilosUiFields[field_index].width : static_cast<int>(sizeof(rendered)) - 1] = '\0';
+        std::printf(" %s=%s", SilosUiFields[field_index].name, rendered);
+      }
+    }
+    std::printf("\\n");
+    ++row_index;
+    rows = rest(rows);
+  }
+  UiReadyRendered = row_index == 2;
+}
+
+bool silos_ui_is_declared_field(object *field) {
+  if (!symbolp(field)) return false;
+  for (std::size_t index = 0; index < SilosUiTypeFieldCount; ++index) {
+    if (silos_symbol_name_is(field, SilosUiTypeFields[index].name)) return true;
+  }
+  return false;
+}
+
+bool silos_ui_is_list_of_declared_type(object *declaration) {
+  return consp(declaration) && listlength(declaration) == 2 &&
+      silos_symbol_name_is(first(declaration), "list-of") &&
+      symbolp(second(declaration)) &&
+      silos_symbol_name_is(second(declaration), SilosUiTypeName);
+}
+
+bool silos_ui_is_store_ref_list_of_declared_type(object *declaration) {
+  return consp(declaration) && listlength(declaration) == 2 &&
+      silos_symbol_name_is(first(declaration), "store-ref") &&
+      silos_ui_is_list_of_declared_type(second(declaration));
+}
+
+object *fn_defuitype (object *args, object *env) {
+  (void) env;
+  if (SilosUiTypeDeclared || !symbolp(first(args))) error2("invalid ui type");
+  const int field_count = listlength(cdr(args));
+  if (field_count < 1 || field_count > static_cast<int>(SilosUiFieldCapacity) ||
+      !silos_copy_symbol_name(first(args), SilosUiTypeName,
+                              sizeof(SilosUiTypeName))) {
+    error2("invalid ui type");
+  }
+  object *fields = cdr(args);
+  for (int index = 0; index < field_count; ++index) {
+    object *field = first(fields);
+    if (!consp(field) || listlength(field) != 3 || !symbolp(first(field)) ||
+        !silos_symbol_name_is(second(field), "string") || !integerp(third(field)) ||
+        !silos_copy_symbol_name(first(field), SilosUiTypeFields[index].name,
+                                InMemoryFieldNameCapacity)) {
+      error2("invalid ui type field");
+    }
+    const int slot = checkinteger(third(field));
+    if (slot < 0 || slot >= field_count) error2("invalid ui type slot");
+    for (int previous = 0; previous < index; ++previous) {
+      if (SilosUiTypeFields[previous].slot == slot) error2("duplicate ui type slot");
+    }
+    SilosUiTypeFields[index].slot = slot;
+    fields = rest(fields);
+  }
+  for (int slot = 0; slot < field_count; ++slot) {
+    bool found = false;
+    for (int index = 0; index < field_count; ++index) {
+      if (SilosUiTypeFields[index].slot == slot) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) error2("non-contiguous ui type slots");
+  }
+  SilosUiTypeFieldCount = static_cast<std::size_t>(field_count);
+  SilosUiTypeDeclared = true;
+  return number(1);
+}
+
+object *fn_defui (object *args, object *env) {
+  if (SilosUiRefDeclared || !symbolp(first(args)) ||
+      !silos_ui_is_store_ref_list_of_declared_type(second(args))) {
+    error2("invalid ui source");
+  }
+  object *source = eval(third(args), env);
+  if (source != SilosBoundStoreRef) error2("invalid ui source");
+  SilosUiSourceRef = source;
+  SilosUiRefDeclared = true;
+  SilosUiRefHandle = 1;
+  return number(SilosUiRefHandle);
+}
+
+object *fn_defuitemplate (object *args, object *env) {
+  (void) env;
+  if (!SilosUiTypeDeclared || SilosUiItemTemplateDeclared || !symbolp(first(args)) ||
+      !consp(second(args)) || listlength(second(args)) != 2 ||
+      !symbolp(first(second(args))) || !symbolp(second(second(args))) ||
+      !silos_symbol_name_is(second(second(args)), SilosUiTypeName)) {
+    error2("invalid ui item template");
+  }
+  char item_parameter[InMemoryFieldNameCapacity]{};
+  if (!silos_copy_symbol_name(first(second(args)), item_parameter,
+                              sizeof(item_parameter))) error2("invalid ui item parameter");
+  args = cddr(args);
+  while (args != nil) {
+    object *spec = first(args);
+    if (!consp(spec) || listlength(spec) != 6 ||
+        SilosUiFieldCount == SilosUiFieldCapacity ||
+        !silos_symbol_name_is(first(spec), "str") || !consp(second(spec)) ||
+        listlength(second(spec)) != 3 ||
+        !silos_symbol_name_is(first(second(spec)), "field") ||
+        !silos_symbol_name_is(second(second(spec)), item_parameter) ||
+        !silos_ui_is_declared_field(third(second(spec))) ||
+        !silos_symbol_name_is(third(spec), ":width") ||
+        !integerp(second(cddr(spec))) ||
+        !silos_symbol_name_is(first(cddr(cddr(spec))), ":overflow") ||
+        !silos_symbol_name_is(second(cddr(cddr(spec))), "chop")) {
+      error2("invalid ui field");
+    }
+    if (!silos_copy_symbol_name(third(second(spec)),
+                                SilosUiFields[SilosUiFieldCount].name,
+                                InMemoryFieldNameCapacity)) error2("ui field too long");
+    SilosUiFields[SilosUiFieldCount].width = checkinteger(second(cddr(spec)));
+    if (SilosUiFields[SilosUiFieldCount].width < 1 || SilosUiFields[SilosUiFieldCount].width > 32) error2("invalid ui field width");
+    ++SilosUiFieldCount;
+    args = rest(args);
+  }
+  if (SilosUiFieldCount == 0) error2("empty ui item template");
+  SilosUiItemTemplateDeclared = true;
+  SilosUiTemplateHandle = 2;
+  return number(SilosUiTemplateHandle);
+}
+
+object *fn_defuilist (object *args, object *env) {
+  // This special form receives the public declarative keyword spelling intact.
+  // In uLisp's builtin arity encoding, a maximum of seven means an unbounded
+  // tail, so the compact implementation does not require a public alternate.
+  object *config = cdr(args);
+  if (listlength(config) != 14) error2("invalid ui list");
+  object *source_keyword = first(config);
+  object *source_form = second(config);
+  config = cddr(config);
+  object *template_keyword = first(config);
+  object *template_form = second(config);
+  config = cddr(config);
+  object *offset_keyword = first(config);
+  object *offset = second(config);
+  config = cddr(config);
+  object *limit_keyword = first(config);
+  object *limit = second(config);
+  config = cddr(config);
+  object *pending_keyword = first(config);
+  object *pending = second(config);
+  config = cddr(config);
+  object *empty_keyword = first(config);
+  object *empty = second(config);
+  config = cddr(config);
+  object *error_keyword = first(config);
+  object *error_text = second(config);
+  if (SilosUiListDeclared || !SilosUiRefDeclared || !SilosUiItemTemplateDeclared ||
+      !symbolp(first(args)) || !silos_symbol_is(source_keyword, ":source") ||
+      checkinteger(eval(source_form, env)) != SilosUiRefHandle ||
+      !silos_symbol_is(template_keyword, ":item-template") ||
+      checkinteger(eval(template_form, env)) != SilosUiTemplateHandle ||
+      !silos_symbol_is(offset_keyword, ":offset") || checkinteger(offset) != 0 ||
+      !silos_symbol_is(limit_keyword, ":limit") || checkinteger(limit) != 5 ||
+      !silos_symbol_is(pending_keyword, ":pending") ||
+      !silos_symbol_is(empty_keyword, ":empty") ||
+      !silos_symbol_is(error_keyword, ":error")) error2("invalid ui list");
+  cstring(checkstring(pending), SilosUiPendingText, sizeof(SilosUiPendingText));
+  cstring(checkstring(empty), SilosUiEmptyText, sizeof(SilosUiEmptyText));
+  cstring(checkstring(error_text), SilosUiErrorText, sizeof(SilosUiErrorText));
+  SilosUiListDeclared = true;
+  SilosUiListHandle = 3;
+  return number(SilosUiListHandle);
+}
+
+object *fn_uimount (object *args, object *env) {
+  (void) env;
+  if (!SilosUiListDeclared || SilosUiMounted || checkinteger(first(args)) != SilosUiListHandle ||
+      !silos_symbol_is(second(args), ":region") || !symbolp(third(args))) error2("invalid ui mount");
+  SilosUiMounted = true;
+  silos_render_ui();
+  return number(4);
+}
+
 object *fn_storebind (object *args, object *env) {
   (void) env;
   char name[StoreNameCapacity];
@@ -331,9 +655,67 @@ object *fn_storerefwatch (object *args, object *env) {
 
 object *fn_appstart (object *args, object *env) {
   (void) env;
+  if (SilosActiveHandler != NULL) error2("app already started");
   SilosActiveHandler = first(args);
   silos_record_app_start();
+  ShellEvent initialise{};
+  initialise.kind = ShellEventKind::AppInitialise;
+  initialise.app_generation = ActiveAppGeneration;
+  if (xQueueSend(ShellEventQueue, &initialise, 0) != pdPASS) error2("shell event queue is full");
   return tee;
+}
+
+object *fn_apppoke (object *args, object *env) {
+  (void) env;
+  if (SilosActiveHandler == NULL) error2("app is not started");
+  if (SilosPokePending) error2("poke-pending");
+  ShellRequest request{};
+  request.app_generation = ActiveAppGeneration;
+  if (!silos_serialise_value(args, request.payload, 0, request.payload.root)) error2("unsupported poke payload");
+  if (xQueueSend(ShellRequestQueue, &request, 0) != pdPASS) error2("shell request queue is full");
+  SilosPokePending = true;
+  return tee;
+}
+
+// The Shell only knows event tags and copied payloads. App conventions such as
+// `init` and its stage numbers are interpreted exclusively by the Lisp handler.
+void silos_dispatch_shell_event(const ShellEvent &event) {
+  if (event.app_generation != ActiveAppGeneration || SilosActiveHandler == NULL) return;
+  object *event_value = nil;
+  if (event.kind == ShellEventKind::AppInitialise) {
+    AppInitialiseDelivered = true;
+    AppObservedNoBindBeforeInit = SilosBoundStoreRef == nil;
+    event_value = silos_symbol("app-initialise");
+  } else {
+    SilosPokePending = false;
+    ++AppPokeCount;
+    object *payload = silos_deserialise_value(event.payload, event.payload.root);
+    protect(payload);
+    object *tag = silos_symbol("poke");
+    event_value = cons(tag, payload);
+    unprotect();
+  }
+  protect(event_value);
+  object *arguments = cons(event_value, nil);
+  protect(arguments);
+  (void)apply(SilosActiveHandler, arguments, nullptr);
+  ++AppEventCount;
+  unprotect();
+  unprotect();
+}
+
+// Cleanup is intentionally explicit even though this one-app proof does not
+// expose a Reload button yet. It prevents old roots or a queued poke from
+// leaking into the next app generation when bootstrap/reload is added.
+void silos_cleanup_active_app() {
+  SilosActiveHandler = nil;
+  SilosBoundStoreRef = nil;
+  SilosBoundStoreWatch = nil;
+  SilosUiSourceRef = nil;
+  SilosPokePending = false;
+  SilosUiMounted = false;
+  xQueueReset(ShellRequestQueue);
+  xQueueReset(ShellEventQueue);
 }
 
 // This is a test-only observation sink, not a proposed Store or Shell API.
@@ -358,10 +740,27 @@ object *fn_silostestwatchobservation (object *args, object *env) {
   return tee;
 }
 
+// Like the watch observation hook, this is only a compact CTest witness. The
+// actual staging decision stays in the app's ordinary event handler.
+object *fn_silostestappstage (object *args, object *env) {
+  (void) env;
+  const int stage = checkinteger(first(args));
+  if (stage == 1 && !AppObservedStageOne) {
+    AppObservedStageOne = true;
+  } else if (stage == 2 && AppObservedStageOne && !AppObservedStageTwo) {
+    AppObservedStageTwo = true;
+    AppObservedPokeFifo = AppPokeCount == 2;
+  } else {
+    error2("unexpected app stage");
+  }
+  return tee;
+}
+
 void silos_mark_roots () {
   markobject(SilosActiveHandler);
   markobject(SilosBoundStoreRef);
   markobject(SilosBoundStoreWatch);
+  markobject(SilosUiSourceRef);
 }
 
 ]])
@@ -373,7 +772,25 @@ string(REPLACE
 )
 string(REPLACE
   "  { \":output\", (fn_ptr_type)OUTPUT, PINMODE, NULL },\n};"
-  "  { \":output\", (fn_ptr_type)OUTPUT, PINMODE, NULL },\n  { \"app-declare\", fn_appdeclare, 0207, doc_appdeclare },\n  { \"app-start\", fn_appstart, 0211, doc_appstart },\n  { \"field\", fn_field, 0222, doc_field },\n  { \"store-bind\", fn_storebind, 0244, doc_storebind },\n  { \"store-ref-watch\", fn_storerefwatch, 0222, doc_storerefwatch },\n  { \"silos-test-watch-observation\", fn_silostestwatchobservation, 0255, NULL },\n};"
+  "  { \":output\", (fn_ptr_type)OUTPUT, PINMODE, NULL },\n  { \"app-declare\", fn_appdeclare, 0207, doc_appdeclare },\n  { \"app-start\", fn_appstart, 0211, doc_appstart },\n  { \"app-request-poke\", fn_apppoke, 0207, doc_apppoke },\n  { \"field\", fn_field, 0222, doc_field },\n  { \"store-bind\", fn_storebind, 0244, doc_storebind },\n  { \"store-ref-watch\", fn_storerefwatch, 0222, doc_storerefwatch },\n  { \"defuitype\", fn_defuitype, 0222, doc_defuitype },\n  { \"defui\", fn_defui, 0233, doc_defui },\n  { \"defuitemplate\", fn_defuitemplate, 0227, doc_defuitemplate },\n  { \"defuilist\", fn_defuilist, 0327, doc_defuilist },\n  { \"ui-mount\", fn_uimount, 0233, doc_uimount },\n  { \"silos-test-watch-observation\", fn_silostestwatchobservation, 0255, NULL },\n  { \"silos-test-app-stage\", fn_silostestappstage, 0211, NULL },\n};"
+  ULISP_GENERATED_SOURCE
+  "${ULISP_GENERATED_SOURCE}"
+)
+string(REPLACE
+  "{ \"defuitype\", fn_defuitype, 0222, doc_defuitype }"
+  "{ \"defuitype\", fn_defuitype, 0327, doc_defuitype }"
+  ULISP_GENERATED_SOURCE
+  "${ULISP_GENERATED_SOURCE}"
+)
+string(REPLACE
+  "{ \"defui\", fn_defui, 0233, doc_defui }"
+  "{ \"defui\", fn_defui, 0333, doc_defui }"
+  ULISP_GENERATED_SOURCE
+  "${ULISP_GENERATED_SOURCE}"
+)
+string(REPLACE
+  "{ \"defuitemplate\", fn_defuitemplate, 0227, doc_defuitemplate }"
+  "{ \"defuitemplate\", fn_defuitemplate, 0327, doc_defuitemplate }"
   ULISP_GENERATED_SOURCE
   "${ULISP_GENERATED_SOURCE}"
 )

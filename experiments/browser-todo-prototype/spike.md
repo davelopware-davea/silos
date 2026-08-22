@@ -252,7 +252,7 @@ versioned input files, rather than from compiled C++ source and to-do constants?
   `apps/todo/app.lisp`, evaluated from `apps/todo/src/main.lisp`, and bound
   the imported `todo/items.csv` rows.
 - The importer rejects malformed or over-capacity input deterministically. Its
-  current bounds are 4096 bytes per file, 8 stores, 40 rows/store, 4 fields/row,
+  current bounds are 4096 bytes per file, 8 stores, 64 rows/store, 4 fields/row,
   15-character field names, and 255-character source lines or field values.
   CSV supports quoted commas and doubled quotes, but deliberately rejects
   quoted line breaks and lone CR line endings.
@@ -262,3 +262,83 @@ versioned input files, rather than from compiled C++ source and to-do constants?
 
 What schema-ordered Lisp record literal should `store-row-add` accept before
 the next phase adds row creation?
+
+## 2026-08-21 - Lifecycle poke and bounded StoreRef list render
+
+### Question
+
+Can the app receive a later lifecycle event, use application-owned staged poke
+payloads to control binding and mounting, and render imported StoreRef rows
+through bounded UI declarations without adding native stage branches?
+
+### Method
+
+- Added one queued `app-initialise` delivery after successful `app-start` and a
+  one-outstanding-poke queue boundary. Payloads use a fixed 16-node native
+  arena with index links, then become fresh `(poke . payload)` Lisp lists on
+  the next uLisp event turn.
+- Reconstructed short symbols with uLisp's packed radix-40 rule and longer
+  symbols with its long-symbol interning rule. This preserves app-level symbol
+  equality after the native queue boundary.
+- Declared the documented keyword-form `defuilist` as an unbounded special
+  form, preserving the public source form despite uLisp's seven-argument
+  fixed-function encoding. The app uses its own `init` and numeric stages to
+  bind, then declare and mount the StoreRef list.
+- Raised fixed source rows/store from 40 to 64 for the now-commented 63-row
+  entry source, and Browser task slots from four to five for uLisp, storage,
+  Shell forwarding, client verification, and idle.
+
+### Observed result
+
+- Emscripten configure/build and CTest passed. The proof delivered one
+  `app-initialise`, two FIFO pokes, one pending-to-ready StoreRef watch, and a
+  mounted list that rendered both imported to-dos.
+- The Shell did not interpret `init` or either stage number; the bind and mount
+  were selected only by the app handler. No vendored FreeRTOS or uLisp source
+  changed.
+
+### Next question
+
+What bounded semantic input event should drive the first editable to-do action?
+
+## 2026-08-22 - Lifecycle/UI proof handoff and checkout reconciliation
+
+### Question
+
+Is the Browser prototype's current proof recorded in the authoritative checkout
+and ready for the next editable-store design decision without carrying forward
+stale-checkout or vendor ambiguity?
+
+### Method
+
+- Reconciled the accidental continuation in a stale OneDrive checkout into the
+  authoritative `C:\Users\dave\src\SilOS` checkout using Git-normalised
+  content hashes. The `src` branch is reconciled through
+  `d992ad6 design: add bounded UI API proposal`, plus the current uncommitted
+  lifecycle/UI/poke/cross-reference work on `codex/browser-todo-prototype`.
+- Checked the proof boundary: general queue-backed `(app-request-poke arg...)`
+  produces a fresh `(poke . payload)` on a later uLisp turn; the Shell also
+  sends a later-turn `app-initialise`; application-owned `init` stages select
+  binding and UI mounting; and the StoreRef watch drives bounded
+  UiRef/template/list/mount rendering.
+- Checked the versioned source and test result. Source UI forms match the
+  general [UI API](../../docs/design/API-UI.md); the imported Lisp source has
+  63 rows within its fixed 64-row limit; CTest passed in the authoritative
+  checkout in 0.26 seconds.
+
+### Observed result
+
+- The two imported CSV rows render through the mounted list after the
+  pending-to-ready StoreRef transition. This proof still excludes semantic
+  create, edit, delete, and persistence behaviour.
+- No vendor files changed. The API-Shell lifecycle/poke amendment remains
+  uncommitted, as do the associated lifecycle/UI/cross-reference changes.
+- Recovery material remains intentionally untouched: `stash@{0}` is named
+  `codex-migration-pre-sync-2026-08-22`, and `.vscode/` is unrelated untracked
+  content.
+
+### Next question
+
+What schema-ordered Lisp record representation and validation should
+`store-row-add` require before separately delegated create/edit/delete phases,
+then persistence and restart behaviour?
