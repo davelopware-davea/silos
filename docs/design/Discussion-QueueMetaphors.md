@@ -169,22 +169,22 @@ direct alternative when no StoreRowRef is available.
 Three watch scopes are proposed:
 
 ```lisp
-(store-ref-watch todos-ref
+(store-watch todos-ref
   (lambda (live old-value)
     ...))
 
-(store-row-ref-watch row1
+(store-row-watch row1
   (lambda (live-row old-value)
     ...))
 
-(store-ref-watch-rows todos-ref
+(store-rows-watch todos-ref
   (lambda (live-row old-value)
     ...))
 ```
 
-`store-ref-watch` observes top-level request metadata and result membership, but
-does not fire for every field change within every row. `store-row-ref-watch`
-observes one StoreRowRef. `store-ref-watch-rows` observes changes to all rows in
+`store-watch` observes top-level request metadata and result membership, but
+does not fire for every field change within every row. `store-row-watch`
+observes one StoreRowRef. `store-rows-watch` observes changes to all rows in
 the collection and automatically follows rows entering or leaving the result
 set.
 

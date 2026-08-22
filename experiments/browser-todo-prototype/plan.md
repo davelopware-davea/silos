@@ -122,7 +122,7 @@ and delete to-do items, and persists those items across restart.
 - The app binds the volatile `todo/items.csv` row store with documented
   `store-bind`; it sees an immediate pending StoreRef and then live
   StoreRowRefs after a bounded storage completion reaches the uLisp task.
-- The app uses documented `store-ref-watch` for that StoreRef's state change.
+- The app uses documented `store-watch` for that StoreRef's state change.
   The uLisp task snapshots the old pending/nil ref before updating it to ready,
   then invokes the watch once with `(live old-value)`. `app-start` remains a
   separate, unused-in-this-proof app-level handler for future Shell events.

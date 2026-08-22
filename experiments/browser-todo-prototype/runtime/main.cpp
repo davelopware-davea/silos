@@ -417,7 +417,7 @@ void client_task(void *) {
                       SilosUiTypeDeclared && SilosUiRefDeclared &&
                       SilosUiItemTemplateDeclared && SilosUiListDeclared &&
                       SilosUiMounted && UiReadyRendered;
-  std::printf("store-ref-watch fired=%d ready=%s count=%s old=pending/%s\n",
+  std::printf("store-watch fired=%d ready=%s count=%s old=pending/%s\n",
               StoreRefWatchInvocationCount,
               StoreRefWatchObservedReady ? "yes" : "no",
               StoreRefWatchObservedCount ? "yes" : "no",

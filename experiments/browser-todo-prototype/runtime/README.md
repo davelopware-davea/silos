@@ -10,7 +10,7 @@ experiment's clean FreeRTOS and uLisp vendor trees. It then:
 4. streams and evaluates the declared entry store; and
 5. proves that `store-bind` returns pending first, then the uLisp task receives
    a bounded completion, snapshots the old pending ref, exposes ready
-   StoreRowRefs, and invokes one `store-ref-watch` callback on the uLisp task
+   StoreRowRefs, and invokes one `store-watch` callback on the uLisp task
    using the public `store-status`, `store-row-count`, `store-row-at`, and
    `store-row-field` accessors;
    and
@@ -66,7 +66,7 @@ and 4096 bytes per input file. CSV accepts LF or CRLF records, quoted commas,
 and doubled quotes; it rejects malformed quotes, lone CR, quoted line breaks,
 NUL bytes, unsupported extensions, and all capacity overflows.
 
-The entry registers two deliberately different callbacks. `store-ref-watch`
+The entry registers two deliberately different callbacks. `store-watch`
 is the documented storage callback: it receives `(live old-value)` only after
 the live StoreRef has changed. `app-start` separately retains an app-level
 handler. It receives `app-initialise` later and uses two generic `poke` events

@@ -27,7 +27,7 @@
                 ; StoreRef watch is attached before requesting another turn.
                 (defvar todo-items
                   (store-bind "todo/items.csv" '(desc status) 0 5))
-                (store-ref-watch
+                (store-watch
                   todo-items
                   (lambda (live old-value)
                     ; Store changes belong to this watch, never to APP-START.

@@ -197,7 +197,7 @@ The following events mark every mount that depends on the UiRef dirty:
 
 The list declaration installs two internally owned watches when a StoreRef
 becomes its source: one collection watch for StoreRef state/membership and one
-`store-ref-watch-rows` watch that follows its current rows.  Their callbacks
+`store-rows-watch` watch that follows its current rows.  Their callbacks
 run on the uLisp task only, mark the view dirty, and return.  Thus a
 `pending -> ready`, row insertion, deletion, field update, `saving`, or `error`
 transition causes a later redraw.  They never render synchronously and must not

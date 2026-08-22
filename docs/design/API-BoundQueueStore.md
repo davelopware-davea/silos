@@ -25,9 +25,9 @@ Draft recorded on 14 August 2026.
 | [`store-row-add`](#store-row-add) | Add a row. |
 | [`store-row-delete`](#store-row-delete) | Delete a bound row. |
 | [`store-row-delete-id`](#store-row-delete-id) | Delete a row by stable ID. |
-| [`store-ref-watch`](#store-ref-watch) | Watch a StoreRef. |
-| [`store-row-ref-watch`](#store-row-ref-watch) | Watch one StoreRowRef. |
-| [`store-ref-watch-rows`](#store-ref-watch-rows) | Watch the rows of a bound StoreRef. |
+| [`store-watch`](#store-watch) | Watch a StoreRef. |
+| [`store-row-watch`](#store-row-watch) | Watch one StoreRowRef. |
+| [`store-rows-watch`](#store-rows-watch) | Watch the rows of a bound StoreRef. |
 
 ## Status
 
@@ -418,10 +418,10 @@ delete-row`.
 Watch callbacks run only on the uLisp task after their corresponding value has
 changed.
 
-### `store-ref-watch`
+### `store-watch`
 
 ```lisp
-(store-ref-watch store-ref
+(store-watch store-ref
   (lambda (live old-value)
     ...))
 ```
@@ -429,20 +429,20 @@ changed.
 Watches top-level request metadata and result membership. It does not fire for
 every field change inside every row.
 
-### `store-row-ref-watch`
+### `store-row-watch`
 
 ```lisp
-(store-row-ref-watch row-ref
+(store-row-watch row-ref
   (lambda (live-row old-value)
     ...))
 ```
 
 Watches one StoreRowRef.
 
-### `store-ref-watch-rows`
+### `store-rows-watch`
 
 ```lisp
-(store-ref-watch-rows store-ref
+(store-rows-watch store-ref
   (lambda (live-row old-value)
     ...))
 ```

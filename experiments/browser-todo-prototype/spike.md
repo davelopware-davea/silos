@@ -445,6 +445,41 @@ the current Browser proof before subsequent work begins?
 What record representation and validation should `store-row-add` use before
 the first editable-store phase, which must again end at this visual-check gate?
 
+## 2026-08-22 - Store watch vocabulary migration
+
+### Question
+
+Can the Browser proof adopt the shorter Store watch vocabulary without
+changing the lifecycle semantics or its visible bound-template result?
+
+### Method
+
+- Renamed the read-only StoreRef watch form to `store-watch` in the Browser
+  runtime and experiment Lisp, retaining its existing pending-to-ready
+  lifecycle proof.
+- Documented `store-row-watch` and `store-rows-watch` as the corresponding
+  future row and row-collection watch APIs; the read-only runtime deliberately
+  does not implement those mutation-phase forms yet.
+- Rebuilt and ran CTest, then checked the staged Browser surface. Because the
+  Bash launcher service was inaccessible to the worker, the Browser check used
+  an alternate temporary loopback server only; it did not alter the launcher
+  or runtime behaviour.
+
+### Observed result
+
+- CTest passed: `1/1` in `0.36` seconds.
+- The Browser surface reached ready state and visibly rendered the same two
+  bound template rows.
+- `store-watch` is implemented for the read-only lifecycle proof. The
+  documented `store-row-watch` and `store-rows-watch` remain future APIs for
+  subsequent row mutation work.
+
+### Next question
+
+What record representation and validation should `store-row-add` use before
+the first editable-store phase, followed by its required Browser visual-check
+pause?
+
 ## 2026-08-22 - UI and Store accessor vocabulary migration
 
 ### Question

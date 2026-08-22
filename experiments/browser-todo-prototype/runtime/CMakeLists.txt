@@ -52,7 +52,7 @@ set(SILOS_APP_EXTENSION [[
 const char doc_appdeclare[] = "(app-declare :name string :ideal-width integer :ideal-height integer :entry string)\nRegisters the current app declaration during bootstrap.";
 const char doc_appstart[] = "(app-start handler)\nRegisters the current app event handler.";
 const char doc_storebind[] = "(store-bind name fields start count)\nReturns a live StoreRef whose rows become ready asynchronously.";
-const char doc_storerefwatch[] = "(store-ref-watch store-ref handler)\nCalls handler with live and old StoreRef values after a top-level ref change.";
+const char doc_storewatch[] = "(store-watch store-ref handler)\nCalls handler with live and old StoreRef values after a top-level ref change.";
 const char doc_storestatus[] = "(store-status store-ref)\nReads a StoreRef operation status.";
 const char doc_storeerror[] = "(store-error store-ref)\nReads a StoreRef error.";
 const char doc_storevalue[] = "(store-value store-ref)\nReads a ready StoreRef result.";
@@ -771,7 +771,7 @@ object *fn_storebind (object *args, object *env) {
   return SilosBoundStoreRef;
 }
 
-object *fn_storerefwatch (object *args, object *env) {
+object *fn_storewatch (object *args, object *env) {
   (void) env;
   if (first(args) != SilosBoundStoreRef) error2("unknown StoreRef");
   if (SilosBoundStoreWatch != NULL) error2("StoreRef already has a watch");
@@ -899,7 +899,7 @@ string(REPLACE
 )
 string(REPLACE
   "  { \":output\", (fn_ptr_type)OUTPUT, PINMODE, NULL },\n};"
-  "  { \":output\", (fn_ptr_type)OUTPUT, PINMODE, NULL },\n  { \"app-declare\", fn_appdeclare, 0207, doc_appdeclare },\n  { \"app-start\", fn_appstart, 0211, doc_appstart },\n  { \"app-request-poke\", fn_apppoke, 0207, doc_apppoke },\n  { \"store-bind\", fn_storebind, 0244, doc_storebind },\n  { \"store-status\", fn_storestatus, 0211, doc_storestatus },\n  { \"store-error\", fn_storeerror, 0211, doc_storeerror },\n  { \"store-value\", fn_storevalue, 0211, doc_storevalue },\n  { \"store-row-count\", fn_storerowcount, 0211, doc_storerowcount },\n  { \"store-row-at\", fn_storerowat, 0222, doc_storerowat },\n  { \"store-row-id\", fn_storerowid, 0211, doc_storerowid },\n  { \"store-row-revision\", fn_storerowrevision, 0211, doc_storerowrevision },\n  { \"store-row-status\", fn_storerowstatus, 0211, doc_storerowstatus },\n  { \"store-row-error\", fn_storerowerror, 0211, doc_storerowerror },\n  { \"store-row-field\", fn_storerowfield, 0222, doc_storerowfield },\n  { \"store-ref-watch\", fn_storerefwatch, 0222, doc_storerefwatch },\n  { \"ui-type\", fn_uitype, 0327, doc_uitype },\n  { \"ui-bind\", fn_uibind, 0333, doc_uibind },\n  { \"ui-template\", fn_uitemplate, 0327, doc_uitemplate },\n  { \"ui-template-list\", fn_uitemplatelist, 0327, doc_uitemplatelist },\n  { \"ui-mount\", fn_uimount, 0233, doc_uimount },\n  { \"silos-test-watch-observation\", fn_silostestwatchobservation, 0244, NULL },\n  { \"silos-test-app-stage\", fn_silostestappstage, 0211, NULL },\n};"
+  "  { \":output\", (fn_ptr_type)OUTPUT, PINMODE, NULL },\n  { \"app-declare\", fn_appdeclare, 0207, doc_appdeclare },\n  { \"app-start\", fn_appstart, 0211, doc_appstart },\n  { \"app-request-poke\", fn_apppoke, 0207, doc_apppoke },\n  { \"store-bind\", fn_storebind, 0244, doc_storebind },\n  { \"store-status\", fn_storestatus, 0211, doc_storestatus },\n  { \"store-error\", fn_storeerror, 0211, doc_storeerror },\n  { \"store-value\", fn_storevalue, 0211, doc_storevalue },\n  { \"store-row-count\", fn_storerowcount, 0211, doc_storerowcount },\n  { \"store-row-at\", fn_storerowat, 0222, doc_storerowat },\n  { \"store-row-id\", fn_storerowid, 0211, doc_storerowid },\n  { \"store-row-revision\", fn_storerowrevision, 0211, doc_storerowrevision },\n  { \"store-row-status\", fn_storerowstatus, 0211, doc_storerowstatus },\n  { \"store-row-error\", fn_storerowerror, 0211, doc_storerowerror },\n  { \"store-row-field\", fn_storerowfield, 0222, doc_storerowfield },\n  { \"store-watch\", fn_storewatch, 0222, doc_storewatch },\n  { \"ui-type\", fn_uitype, 0327, doc_uitype },\n  { \"ui-bind\", fn_uibind, 0333, doc_uibind },\n  { \"ui-template\", fn_uitemplate, 0327, doc_uitemplate },\n  { \"ui-template-list\", fn_uitemplatelist, 0327, doc_uitemplatelist },\n  { \"ui-mount\", fn_uimount, 0233, doc_uimount },\n  { \"silos-test-watch-observation\", fn_silostestwatchobservation, 0244, NULL },\n  { \"silos-test-app-stage\", fn_silostestappstage, 0211, NULL },\n};"
   ULISP_GENERATED_SOURCE
   "${ULISP_GENERATED_SOURCE}"
 )
