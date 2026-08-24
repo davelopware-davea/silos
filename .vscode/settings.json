@@ -1,0 +1,17 @@
+{
+  "files.associations": {
+    "*.inc": "cpp"
+  },
+  "alive.lsp.startCommand": [
+    "sbcl",
+    "--noinform",
+    "--eval",
+    "(require :asdf)",
+    "--load",
+    ".vscode/silos-api-stubs.lisp",
+    "--eval",
+    "(asdf:load-system :alive-lsp)",
+    "--eval",
+    "(alive/server:start)"
+  ]
+}

@@ -480,6 +480,7 @@ flags_t Flags = 1<<PRINTREADABLY; // Set by default
 // Forward references
 object *tee;
 void pfstring (const char *s, pfun_t pfun);
+void silos_mark_roots ();
 
 // Error handling
 
@@ -779,6 +780,7 @@ void gc (object *form, object *env) {
   markobject(tee);
   markobject(GlobalEnv);
   markobject(GCStack);
+  silos_mark_roots();
   markobject(form);
   markobject(env);
   sweep();
@@ -5815,6 +5817,10 @@ const char doc_displaysize[] = "(display-size)\n"
 const char doc_display[] = "(display)\n"
 "Needed on OLED displays to update the display from the memory buffer.";
 
+// SilOS keeps its implementation outside the upstream tree, but includes it
+// here because uLisp's built-ins use sketch-private object and GC internals.
+#include "SilOS/uLisp/Extension.cpp"
+
 // Built-in symbol lookup table
 const tbl_entry_t lookup_table[] = {
   { "nil", NULL, 0000, doc_nil },
@@ -6075,6 +6081,7 @@ const tbl_entry_t lookup_table[] = {
   { ":input-pullup", (fn_ptr_type)INPUT_PULLUP, PINMODE, NULL },
   { ":input-pulldown", (fn_ptr_type)INPUT_PULLDOWN, PINMODE, NULL },
   { ":output", (fn_ptr_type)OUTPUT, PINMODE, NULL },
+#include "SilOS/uLisp/BuiltinEntries.inc"
 };
 
 #if !defined(extensions)

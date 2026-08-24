@@ -629,3 +629,79 @@ literal buffers while retaining explicit, reload-safe ownership?
 
 Does the user approve the unchanged visible result before `store-row-add`
 record validation begins?
+
+## 2026-08-23 - Alive API metadata drift guard
+
+### Question
+
+Can the editor-only Alive API descriptions remain visibly aligned when the
+proposed API documents or this experiment's public uLisp surface changes?
+
+### Method
+
+- Added a cross-platform check that compares all public API headings in the
+  Store, MQTT, Shell, and UI documents with the Alive function/macro stubs.
+- Fingerprinted the normalised contents of those API documents, making any
+  signature or semantic documentation edit require an explicit stub review.
+- Registered the check as `silos_alive_api_stubs` in CTest and added a focused
+  project instruction for agents changing either API documents or public
+  prototype built-ins.
+
+### Observed result
+
+- The check first failed against an unreviewed fingerprint, then passed after
+  recording the reviewed 43-name baseline.
+- The configured Emscripten build regenerated successfully and CTest passed
+  both `silos_todo_boot` and `silos_alive_api_stubs` in 0.62 seconds.
+
+### Next question
+
+Does the user approve the unchanged visible result before `store-row-add`
+record validation begins?
+
+## 2026-08-23 - SilOS code ownership and platform layout
+
+### Question
+
+How should the prototype separate portable SilOS behaviour, dependency
+adapters, target-specific implementation, and direct upstream integration so
+the code remains understandable and future changes remain reviewable?
+
+### Method
+
+- Agreed capability-owned `Store`, `UI`, `Shell`, and `Runtime` modules, with
+  sibling `uLisp` and `FreeRTOS` dependency adapters under `runtime/SilOS`.
+- Placed target-specific implementations under `SilOS/Platform/<Target>`,
+  initially `Browser` only. A consuming module owns each narrow platform
+  interface and names it `Platform<Capability>.h`; Browser implementations use
+  names such as `BrowserSurface` and `BrowserPersistence`.
+- Reinterpreted the tagged upstream baseline as the comparison point for
+  small, explicit uLisp/FreeRTOS hook diffs, not as a prohibition on modifying
+  those trees. Substantive SilOS implementation remains outside `third-party`.
+- Restricted CMake to normal build composition and rejected embedded runtime
+  C++ as a continuing integration mechanism. Recorded the full decision in
+  the project-level
+  [code-layout discussion](../../docs/design/Discussion-Code-Layout.md).
+
+### Result
+
+- The implementation now follows the agreed ownership layout:
+  `Shell/Events.h` owns the bounded event/value contract;
+  `FreeRTOS/QueueRuntime.*` owns the queue/task adapter; and `Runtime/State`,
+  `AppBootstrap`, and `EventPump` own shared state, app loading, and completion
+  and Shell-event delivery.
+- `UI/Renderer.*` consumes the module-owned `UI/PlatformSurface.h` interface.
+  Browser-specific `main.cpp`, `BrowserSurface.cpp`, and store-init loading now
+  live under `Platform/Browser`.
+- `uLisp/Extension.cpp` aggregates interface-specific `.inc` fragments, while
+  `BuiltinEntries.inc` supplies the registration hook. The uLisp vendor diff
+  is seven semantic lines covering extension inclusion, built-in inclusion,
+  and GC-root declaration/call sites. The FreeRTOS vendor tree is unchanged.
+- `runtime/CMakeLists.txt` now performs build composition and the required
+  Arduino-style declaration generation; it contains no embedded runtime
+  implementation. The refactored target built successfully, and CTest passed
+  both `silos_todo_boot` and `silos_alive_api_stubs` (2/2) in 0.76 seconds.
+
+### Next question
+
+What record representation and validation should `store-row-add` use?

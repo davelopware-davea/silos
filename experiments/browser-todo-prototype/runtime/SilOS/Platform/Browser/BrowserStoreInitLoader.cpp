@@ -1,6 +1,6 @@
-#include "StoreInitLoader.h"
+#include "SilOS/Platform/Browser/BrowserStoreInitLoader.h"
 
-#include "InMemoryStoreBackend.h"
+#include "SilOS/Store/InMemoryStoreBackend.h"
 
 #include <cstdint>
 #include <cstdio>

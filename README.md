@@ -31,6 +31,9 @@ the current decisions, open questions, and planned work.
   later areas of work.
 - [SilOS_DESIGN_BACKLOG.md](docs/design/SilOS_DESIGN_BACKLOG.md) - archived design ideas,
   alternatives, and earlier recommendations retained for future reference.
+- [SilOS code layout](docs/design/Discussion-Code-Layout.md) - project-level
+  guidance for module ownership, platform interfaces, dependency adapters,
+  third-party hooks, and build-file boundaries.
 - [Variable binding and templates](docs/design/Discussion-VariableBindingAndTemplates.md)
   - the current prototype discussion covering exposed uLisp variables,
   Shell-owned templates, task ownership, and full-frame rendering.
@@ -56,6 +59,8 @@ SilOS source code is available under the [MIT License](LICENSE).
 
 ## Discussion records
 
+- [SilOS code layout](docs/design/Discussion-Code-Layout.md) - the agreed
+  project-level code ownership and dependency-layout conventions.
 - [Variable binding and templates](docs/design/Discussion-VariableBindingAndTemplates.md)
   - the current high-level hypothesis for exposing variables once and rendering
   them through reusable, screen-independent flow templates.

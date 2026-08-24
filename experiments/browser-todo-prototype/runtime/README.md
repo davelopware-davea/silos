@@ -30,6 +30,26 @@ This proof exercises the corresponding subset of the proposed
 [UI API](../../../docs/design/API-UI.md); it does not commit the experiment to
 every deferred design point in that proposal.
 
+Runtime code is organized by ownership:
+
+- `SilOS/Store` owns the portable in-memory catalogue.
+- `SilOS/Shell/Events.h` owns the bounded, pointer-free event/value contract.
+- `SilOS/FreeRTOS/QueueRuntime.*` adapts those contracts to queues and tasks.
+- `SilOS/Runtime` owns shared state, app discovery/bootstrap, and completion
+  and Shell-event pumping.
+- `SilOS/UI/Renderer.*` consumes the module-owned `PlatformSurface.h` seam;
+  `SilOS/Platform/Browser/BrowserSurface.cpp` implements it with the DOM.
+- `SilOS/Platform/Browser` owns Emscripten/Arduino compatibility, preload
+  import, target composition, and the bounded Browser test harness.
+- `SilOS/uLisp` owns language translation. Because uLisp keeps its evaluator,
+  object representation, and GC internals sketch-private, `Extension.cpp`
+  aggregates interface-specific `.inc` fragments into that one translation
+  unit. `BuiltinEntries.inc` keeps the vendor registration hook to one line.
+
+The vendored uLisp diff is therefore limited to explicit extension inclusion,
+built-in-entry inclusion, and GC-root declaration/call sites. The FreeRTOS
+vendor tree requires no modification.
+
 The source loader preserves the current insertion order of its in-memory rows.
 That is intentionally only a bootstrap simplification; editable source will
 need the later linked-list head/next-row ordering model.
@@ -40,13 +60,14 @@ input, or persistence. Its public Lisp source never traverses StoreRef or
 StoreRowRef `meta`/`value` records directly; those compact association lists
 remain runtime-private behind the typed Store accessors.
 
-`InMemoryStoreBackend.{h,cpp}` contains the experiment-owned, fixed-capacity
+`SilOS/Store/InMemoryStoreBackend.{h,cpp}` contains the experiment-owned, fixed-capacity
 catalogue. Every store has the same generic row representation: stable `id`
 and `revision` metadata plus a bounded array of named string fields. Therefore
 source rows use a `text` field while to-do rows use `desc` and `status`, without
 the backend knowing either shape.
 
-`StoreInitLoader.cpp` traverses the Emscripten-preloaded `/store-init` virtual
+`SilOS/Platform/Browser/BrowserStoreInitLoader.cpp` traverses the
+Emscripten-preloaded `/store-init` virtual
 directory before FreeRTOS starts. A store name is the exact normalized relative
 file path, including the extension:
 

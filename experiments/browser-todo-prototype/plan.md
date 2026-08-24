@@ -2,14 +2,18 @@
 
 **Status:** In progress; the Browser boot/load, read-only StoreRef, bounded
 lifecycle/poke/UI-model, and browser-visible template-rendering proofs are
-complete. The `store-row-add` representation and validation decision is next.
+complete, and their runtime implementation now follows the agreed SilOS code
+layout. The `store-row-add` representation and validation decision is next.
 Each phase pauses after its Browser visual check so the user can run
-`view-browser.sh` before the next phase begins. `build.sh` and `test.sh` are
-the stable from-any-directory Bash entry points for building and testing.
+`view-browser.sh` before the next phase begins. `build.sh` and `test.sh` are the
+stable from-any-directory Bash entry points for building and testing.
 
 **Project context:** [SilOS plan](../../docs/design/SilOS_PLAN.md).
 
 **Relevant API sketch:** [proposed UI API](../../docs/design/API-UI.md).
+
+**Agreed code layout:**
+[SilOS code layout](../../docs/design/Discussion-Code-Layout.md).
 
 ## Current status and handoff
 
@@ -25,8 +29,9 @@ the stable from-any-directory Bash entry points for building and testing.
 - Source UI forms now match the general [UI API](../../docs/design/API-UI.md).
   The lifecycle/UI/cross-reference proof is checkpointed as `e146103 feat:
   prove browser todo lifecycle and UI binding`. The imported Lisp source has
-  63 rows, within its fixed 64-row limit; no vendor files have changed. CTest
-  passed in `C:\Users\dave\src\SilOS` in 0.80 seconds.
+  63 rows, within its fixed 64-row limit. At that checkpoint both vendor trees
+  were unchanged, and CTest passed in `C:\Users\dave\src\SilOS` in 0.80
+  seconds.
 - The current API-consistency increment replaces the prototype-only `defui*`
   names and generic `field` traversal with the approved `ui-*`, `store-*`,
   and `store-row-*` vocabulary. Its 62-row source remains within the fixed
@@ -39,8 +44,20 @@ the stable from-any-directory Bash entry points for building and testing.
   array and exact-length literal strings; there is no per-template instruction
   or `ui-text` literal cap. The imported source path remains independently
   bounded to 64 rows, 255 bytes per source row, and 4096 bytes per file.
-- Leave `stash@{0}` (`codex-migration-pre-sync-2026-08-22`) and the unrelated
-  untracked `.vscode/` directory untouched.
+- The checked-in `.vscode/silos-api-stubs.lisp` gives Alive editor metadata for
+  the proposed public APIs. `silos_alive_api_stubs` compares its public names
+  and reviewed API-document fingerprint under CTest, so API edits fail until
+  the prelude is reviewed and refreshed.
+- The code-layout refactor is complete. Portable ownership is split across
+  `Shell/Events`, `FreeRTOS/QueueRuntime`, `Runtime` state/bootstrap/event
+  pumping, `Store`, and a `UI/Renderer` consuming `UI/PlatformSurface`.
+  Browser startup, surface projection, and store-init loading live under
+  `Platform/Browser`. `uLisp/Extension.cpp` aggregates interface-specific
+  `.inc` fragments and `BuiltinEntries.inc`; the uLisp vendor tree contains a
+  seven-line semantic hook diff, the FreeRTOS vendor tree remains unchanged,
+  and CMake contains build composition rather than embedded runtime code.
+  CTest passed both tests (2/2) in 0.76 seconds after the move.
+- Leave `stash@{0}` (`codex-migration-pre-sync-2026-08-22`) untouched.
 
 **Next session, without beginning it:** decide and document the Lisp record
 representation and validation for `store-row-add`; implement create/edit/delete
@@ -64,6 +81,31 @@ and delete to-do items, and persists those items across restart.
 - Keep experiment-owned code outside `third-party/`; direct edits inside those
   trees must remain reviewable with Git diff.
 
+## Agreed code ownership and layout
+
+- Portable SilOS behaviour lives in capability-owned modules below
+  `runtime/SilOS/`: `Store`, `UI`, `Shell`, and `Runtime`. Dependency adapters
+  live in sibling `uLisp` and `FreeRTOS` modules and must not take ownership of
+  those portable capability semantics.
+- Platform-specific implementation lives below
+  `runtime/SilOS/Platform/<Target>/`; initially the only target directory is
+  `Browser`. Do not create empty directories for prospective targets.
+- A module owns the narrow interface it requires a platform to implement and
+  names it `Platform<Capability>.h`, such as `UI/PlatformSurface.h` or
+  `Store/PlatformPersistence.h`. Target implementations use names such as
+  `BrowserSurface` and depend inward on those interfaces; portable modules do
+  not depend outward on the Browser implementation.
+- Keep third-party uLisp and FreeRTOS changes to the smallest explicit hooks
+  needed to reach SilOS-owned code. The tagged unmodified baseline exists to
+  make these direct changes and future upstream reconciliation reviewable; it
+  does not prohibit vendor-tree changes.
+- `runtime/CMakeLists.txt` performs ordinary build composition only. Runtime
+  C++ implementations, uLisp built-ins, state, and garbage-collector hooks
+  must live in source files, not CMake string literals.
+
+The rationale and dependency rules are recorded in the dedicated
+[code-layout discussion](../../docs/design/Discussion-Code-Layout.md).
+
 ## Sequence
 
 1. **[done]** Commit the vendor baseline after review.
@@ -85,12 +127,15 @@ and delete to-do items, and persists those items across restart.
    and verify that the two imported rows are visibly template-driven.
    `view-browser.sh` builds through `build.sh` and serves the proof on loopback
    for this check.
-7. **[next]** Decide and document the Lisp record representation and
+7. **[done]** Move the prototype into the agreed module/platform layout,
+   replace embedded CMake runtime code with ordinary SilOS-owned sources, and
+   reduce direct dependency changes to the explicit uLisp integration hooks.
+8. **[next]** Decide and document the Lisp record representation and
    validation for `store-row-add`.
-8. **[planned]** Implement create, edit, and delete in separately delegated
+9. **[planned]** Implement create, edit, and delete in separately delegated
    phases.
-9. **[planned]** Add persistence and restart behaviour.
-10. Test and measure live binding, source-loading, handlers, references, and
+10. **[planned]** Add persistence and restart behaviour.
+11. Test and measure live binding, source-loading, handlers, references, and
    storage; record where their APIs need refinement.
 
 ## Browser visual-check gate
