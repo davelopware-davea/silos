@@ -13,11 +13,11 @@ The layout should make it possible to answer three questions from a path
 alone: which SilOS capability owns a piece of code, whether it adapts an
 external dependency, and whether it is specific to an execution target.
 
-This guidance does not decide whether FreeRTOS or uLisp will be part of the
-final cross-target SilOS architecture. Where those dependencies are used,
-their adapters follow the same ownership rules as any other dependency
-adapter. Project-wide architectural direction remains in the
-[SilOS plan](SilOS_PLAN.md).
+The project subsequently adopted the Browser prototype's FreeRTOS/uLisp
+architecture and promoted it to [`src/`](../../src/). Their adapters follow
+the same ownership rules as any other dependency adapter. Reconsidering either
+dependency requires an explicit project-level decision in the
+[SilOS plan](SilOS_PLAN.md); it is no longer an open question in this note.
 
 ## Module ownership
 
@@ -41,7 +41,7 @@ capabilities. `Runtime` owns portable composition and lifecycle behaviour
 which does not naturally belong to one of them.
 
 Directories named for external dependencies contain adapters, not SilOS
-capability policy. For example, when they are used, `uLisp` translates between
+capability policy. `uLisp` translates between
 uLisp objects and operations and the SilOS modules, while `FreeRTOS` maps
 portable scheduling, task, queue, and completion needs onto FreeRTOS. Neither
 adapter owns Store, UI, Shell, or Runtime semantics.

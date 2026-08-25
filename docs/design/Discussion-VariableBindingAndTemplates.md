@@ -1,13 +1,15 @@
 # Discussion: Variable Binding and Templates
 
-Conversation begun on 13 August 2026; updated on 17 August 2026.
+Conversation begun on 13 August 2026; adopted on 25 August 2026.
 
 ## Purpose
 
-This note summarises the current high-level idea for exposing uLisp variables to
-the SilOS Shell and rendering them through reusable, display-independent
-templates. It is discussion material to guide the next prototype; it does not
-yet promote these details into the authoritative SilOS plan.
+This note records the model for exposing uLisp variables to the SilOS Shell and
+rendering them through reusable, display-independent templates. The Browser
+prototype validated the general UiRef/flow-template approach, which is now a
+committed foundation in the authoritative [SilOS plan](SilOS_PLAN.md).
+Unimplemented details and API spelling below remain refinement questions, not
+alternatives to that model.
 
 **Related:** [Shell UI](Discussion-Shell-UI.md) applies UiRefs to focus and
 bottom-line editing. [Earlier binding discussion](Discussion-FreeRTOS-uLisp-Variable-UI-Binding.md)
@@ -21,7 +23,7 @@ preserves the reasoning that led to this model.
 4. [Rendering and synchronisation](#rendering-and-synchronisation)
 5. [Flow-based templates](#flow-based-templates)
 6. [Per-occurrence formatting](#per-occurrence-formatting)
-7. [Prototype questions still to answer](#prototype-questions-still-to-answer)
+7. [Implementation questions still to answer](#implementation-questions-still-to-answer)
 
 ## Core model
 
@@ -199,9 +201,9 @@ justify it. If C formatting later proves too large for the MCU or insufficient
 for values such as dates, its internal representation can change without
 altering the variable-binding or flow-template model.
 
-## Prototype questions still to answer
+## Implementation questions still to answer
 
-The next experiment should establish:
+Production increments should establish:
 
 - the Lisp-facing operations for creating, watching, and releasing a UiRef;
 - whether UiRef and template commands are queued to the Shell task or modify

@@ -19,23 +19,27 @@ to-do list, alarm, calendar, and chat application.
 
 ## Project status
 
-SilOS is currently in the **design and prototyping stage**. The FreeWisp
-FreeRTOS + uLisp Browser spike is complete, and work is now moving into the
-first end-to-end prototype. See [SilOS_PLAN.md](docs/design/SilOS_PLAN.md) for
-the current decisions, open questions, and planned work.
+SilOS is now in **implementation**. The successful Browser to-do prototype has
+been promoted to [`src/`](src/) as the production baseline. FreeRTOS, uLisp,
+StoreRefs/UiRefs, flow templates, capability-owned modules, and narrow platform
+adapters are the committed architecture; current work is completing to-do CRUD,
+persistence, and the ESP32 target. See
+[SilOS_PLAN.md](docs/design/SilOS_PLAN.md) for the current decisions and work.
 
 ## Key documents
 
 - [SilOS_PLAN.md](docs/design/SilOS_PLAN.md) - the authoritative living project plan,
   including agreed principles, the current milestone, active questions, and
   later areas of work.
+- [src/README.md](src/README.md) - the promoted implementation, its current
+  capabilities and limits, and Browser build/test instructions.
 - [SilOS_DESIGN_BACKLOG.md](docs/design/SilOS_DESIGN_BACKLOG.md) - archived design ideas,
   alternatives, and earlier recommendations retained for future reference.
 - [SilOS code layout](docs/design/Discussion-Code-Layout.md) - project-level
   guidance for module ownership, platform interfaces, dependency adapters,
   third-party hooks, and build-file boundaries.
 - [Variable binding and templates](docs/design/Discussion-VariableBindingAndTemplates.md)
-  - the current prototype discussion covering exposed uLisp variables,
+  - the adopted model covering exposed uLisp variables,
   Shell-owned templates, task ownership, and full-frame rendering.
 - [Shell UI](docs/design/Discussion-Shell-UI.md) - the current discussion of
   Shell layout, focus, input, tiny-mode rendering, and bottom-line editing.
@@ -62,7 +66,7 @@ SilOS source code is available under the [MIT License](LICENSE).
 - [SilOS code layout](docs/design/Discussion-Code-Layout.md) - the agreed
   project-level code ownership and dependency-layout conventions.
 - [Variable binding and templates](docs/design/Discussion-VariableBindingAndTemplates.md)
-  - the current high-level hypothesis for exposing variables once and rendering
+  - the adopted model for exposing variables once and rendering
   them through reusable, screen-independent flow templates.
 - [FreeRTOS, uLisp, and variable-to-UI binding](docs/design/Discussion-FreeRTOS-uLisp-Variable-UI-Binding.md)
   - earlier exploratory background on live binding between Lisp values and the

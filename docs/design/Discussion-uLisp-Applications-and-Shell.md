@@ -1,13 +1,15 @@
 # Discussion: uLisp Applications and the Shell
 
-Conversation begun on 18 August 2026.
+Conversation begun on 18 August 2026; general approach adopted on 25 August 2026.
 
 ## Purpose
 
-This note records an exploratory discussion of how the SilOS Shell discovers,
-loads, and runs uLisp applications without assuming a conventional filesystem.
-It is discussion material, not an agreed design or a replacement for the
-authoritative [SilOS plan](SilOS_PLAN.md).
+This note records the reasoning behind how the SilOS Shell discovers, loads,
+and runs uLisp applications without assuming a conventional filesystem. The
+Browser prototype validated store-backed manifests, source loading, one
+uLisp-owned workspace, and Shell lifecycle delivery; that general approach is
+now committed in the authoritative [SilOS plan](SilOS_PLAN.md). Details and
+unimplemented extensions below remain refinement material.
 
 **Related:** [Shell UI](Discussion-Shell-UI.md) defines the Shell's current
 input, layout, and framebuffer responsibilities. [Variable Binding and
@@ -30,7 +32,7 @@ defines the storage model, including logical store names and binary objects.
 10. [Storage backends and CRUD](#storage-backends-and-crud)
 11. [uLisp source as a store](#ulisp-source-as-a-store)
 12. [uLisp modules and imports](#ulisp-modules-and-imports)
-13. [Questions to resolve by experiment](#questions-to-resolve-by-experiment)
+13. [Questions to resolve during implementation](#questions-to-resolve-during-implementation)
 
 ## Starting question
 
@@ -918,7 +920,7 @@ catalogue can be native and the API stores can be populated at build time. A
 later uLisp editor may edit those stores too, but changing a SilOS API's source
 still takes effect only at the next explicit Shell reload.
 
-## Questions to resolve by experiment
+## Questions to resolve during implementation
 
 - Does the selected uLisp support a sufficiently small and deterministic
   source/image loading path on both Browser and ESP32?

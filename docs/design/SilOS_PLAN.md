@@ -9,8 +9,8 @@ This is the authoritative plan for SilOS. It deliberately records only:
 Ideas are not commitments. Detailed alternatives and earlier recommendations are preserved in [SilOS_DESIGN_BACKLOG.md](SilOS_DESIGN_BACKLOG.md) and should be reconsidered only when relevant work begins.
 
 Project-level code ownership and platform boundaries are recorded in the
-[SilOS code-layout discussion](Discussion-Code-Layout.md). Current exploratory
-design material is kept separate: [UiRefs and templates](Discussion-VariableBindingAndTemplates.md),
+[SilOS code-layout discussion](Discussion-Code-Layout.md). Supporting design
+material is kept separate: [UiRefs and templates](Discussion-VariableBindingAndTemplates.md),
 [Shell UI](Discussion-Shell-UI.md), and
 [storage and MQTT references](Discussion-QueueMetaphors.md). The completed
 [FreeWisp plan](../../experiments/freertos-ulisp-browser/plan.md) supplies
@@ -21,7 +21,7 @@ Browser-substrate evidence.
 1. [Purpose](#1-purpose)
 2. [Governing principles](#2-governing-principles)
 3. [Committed foundations](#3-committed-foundations)
-4. [Current milestone: prove the core idea](#4-current-milestone-prove-the-core-idea)
+4. [Current milestone: complete the to-do foundation](#4-current-milestone-complete-the-to-do-foundation)
 5. [Questions to answer during this milestone](#5-questions-to-answer-during-this-milestone)
 6. [Later milestones](#6-later-milestones)
 7. [Topics deliberately deferred](#7-topics-deliberately-deferred)
@@ -68,12 +68,31 @@ This simple mechanism should cover a large proportion of ordinary UI output. Its
 
 ## 3. Committed foundations
 
-### Implementation languages
+### Implementation languages and runtime
 
 - The foundational runtime and platform substrate will use a deliberately controlled subset of C++.
-- SilOS will have a small interpreted or bytecode-executed language of its own.
+- uLisp is the SilOS application and portable-system language. The promoted implementation starts from uLisp ESP 4.9a; its version may be upgraded without reopening the language choice.
+- FreeRTOS is the task, queue, and timing substrate. The promoted implementation starts from FreeRTOS-Kernel V11.3.0, with target-specific ports behind the agreed platform boundaries.
 - As much portable system behaviour as practical—including applications, UI composition, shell behaviour, configuration, and services—will be written in the SilOS language.
 - C++ is reserved for the runtime, platform adaptation, primitive operations, and work whose hardware, timing, memory, or bootstrapping constraints require it.
+
+### Adopted implementation architecture
+
+The Browser to-do prototype has been accepted as the production baseline and
+promoted to [`src/`](../../src/). The following general approach is locked:
+
+- one uLisp-owning task evaluates Lisp and owns its workspace, garbage collection, live references, and callbacks;
+- FreeRTOS queues carry bounded pointer-free messages between task owners;
+- uLisp applications are discovered and loaded from named stores through Shell-managed manifests and lifecycle events;
+- StoreRefs and UiRefs provide stable language-visible live references, while reusable flow templates describe presentation without a conventional application-owned UI tree;
+- portable Store, UI, Shell, and Runtime behaviour is separated from the uLisp and FreeRTOS adapters and from `Platform/<Target>` implementations; and
+- the Browser target uses Emscripten WebAssembly, cooperative fibers, preloaded startup stores, and a narrow Browser surface adapter.
+
+Public operations, record representations, capacities, rendering strategy, and
+platform implementations may be refined as evidence accumulates. Alternative
+languages, schedulers, application/UI architectures, or a return to the older
+candidate approaches are not active options. Replacing one of these committed
+foundations requires an explicit project-level decision and plan update.
 
 ### Initial targets
 
@@ -136,63 +155,47 @@ Applications operate for the current user, who may be an implicit local user or 
 
 SilOS source code is licensed under the MIT License. Licences for fonts, artwork, documentation, examples, and third-party components remain undecided.
 
-## 4. Current milestone: prove the core idea
+## 4. Current milestone: complete the to-do foundation
 
-Build the smallest end-to-end prototype that can test SilOS’s defining architectural claims.
+Continue from the promoted implementation in [`src/`](../../src/) and complete
+the first end-to-end SilOS application. The Browser baseline already proves
+real uLisp loading, bounded FreeRTOS task communication, pending-to-ready
+StoreRefs, watches, UiRefs, flow templates, Shell lifecycle events, and Browser
+surface rendering from substantially portable modules.
 
-The prototype is complete when it:
+This milestone is complete when the same foundation:
 
-1. runs a minimal SilOS-language program;
-2. binds language-visible values directly to screen locations;
-3. updates their displayed representations automatically when values change;
-4. accepts enough input to create, edit, and delete basic to-do items;
-5. persists those items across restart;
-6. runs on the Browser and MCU targets from substantially shared code; and
-7. reports its flash/code size, peak RAM use, startup time, and input-to-display latency.
+1. accepts semantic input to create, edit, change status, and delete to-do items;
+2. automatically reflects those mutations through the live Ref/template path;
+3. persists items across restart with defined interruption behaviour;
+4. runs on Browser and ESP32 from substantially shared application and runtime code; and
+5. reports flash/code size, peak RAM use, startup time, and input-to-display latency.
 
-The first prototype may omit polish, general-purpose APIs, dynamic application loading, networking, authentication, sound, multitasking, and the later reference applications.
+The immediate next step is to decide the uLisp row-record representation and
+validation for `store-row-add`, then implement create, edit, delete, and
+persistence in small verified increments. Polish, networking, authentication,
+sound, multiple active applications, and later reference applications remain
+outside this milestone.
 
-### Current variable-binding hypothesis
-
-The current prototype direction is summarised in [Discussion: Variable Binding and Templates](Discussion-VariableBindingAndTemplates.md). It separates exposing a uLisp variable once from rendering that binding any number of times through reusable, screen-independent flow templates. A Shell UI task owns template interpretation and the framebuffer and initially redraws the complete active template on every refresh. These details remain hypotheses to test rather than settled architecture.
-
-### Immediate next step
-
-Build a Browser-first minimal to-do application in real uLisp. Use one active
-application and the smallest proposed Shell boundary: app declaration, loading,
-UiRefs/templates, Shell semantic input, and StoreRef-backed to-do rows. The
-purpose is to expose where the proposed Shell, source-loading, handler, Ref,
-and storage APIs need refinement when expressed as actual uLisp code. This is
-an experiment within the current milestone, not adoption of the API sketches
-as final interfaces.
-
-### Provisional Browser substrate
-
-The completed [FreeWisp spike](../../experiments/freertos-ulisp-browser/plan.md) demonstrated that the real FreeRTOS kernel and uLisp evaluator can run together in browser WebAssembly using cooperative Emscripten fibers. The runtime operated in a dedicated Web Worker, communicated through FreeRTOS queues and Worker messages, yielded during long evaluations, and drove a 128x64 framebuffer from Lisp without freezing the page.
-
-For the first end-to-end prototype, SilOS will provisionally use FreeWisp as the Browser substrate. This is a prototype choice, not a final commitment to FreeRTOS or uLisp across all targets.
-
-The evidence supporting this choice includes evaluator safe-point gaps no longer than 11.9 ms in the tested workload, garbage collections no longer than 1.0 ms, and final optimised Browser artifacts totalling about 424 KiB. The Browser scheduler preserves monotonic logical time but is not real-time: ticks may be late and advance in catch-up bursts.
-
-FreeWisp's explicit pixel primitives prove the language-to-display path but do not answer the live memory-to-display binding questions. The prototype must still establish ESP32 fit, substantially shared Browser/MCU code, the shared platform interfaces, and whether uLisp and FreeRTOS remain appropriate beyond this provisional Browser role.
-
-FreeWisp is complete and is no longer an active work plan. Its detailed plan, experimental journal, source, and measurements are historical evidence and should be loaded into context only when FreeWisp is specifically requested or referenced. The summary above is sufficient context for ordinary work on the current prototype.
+The completed Browser prototype and FreeWisp spike remain historical evidence;
+their experiment plans no longer direct production work. Development and new
+tests belong in `src/`.
 
 ## 5. Questions to answer during this milestone
 
-These are the only active design questions. Prefer small experiments over speculative design.
+These are the only active design questions. They refine the adopted approach;
+they do not reopen its foundations.
 
-1. What is the smallest language value and execution model that can express the prototype?
-2. How does a live display binding identify a value and remain safe when that value changes type, moves, or expires?
-3. Which scalar and collection values can initially be displayed, and how are they formatted and positioned?
-4. How are bindings created, updated, and removed within fixed resource limits?
-5. Can live bindings replace most of a conventional UI tree or render loop, or is one additional small concept required for input and layout?
-6. What minimal display, input, timing, and storage interfaces are shared by Browser and MCU?
-7. What persistence representation and interruption guarantees are sufficient for the first to-do list?
-8. Which C++ features and runtime facilities are allowed in the prototype?
-9. What resource measurements would show that the approach is viable on the reference MCU?
+1. What uLisp record representation and validation rules should Store CRUD use?
+2. How are UiRefs, StoreRefs, watches, templates, and app-owned allocations released safely on reload or failure?
+3. Which fixed capacities and error behaviour are sufficient for editable to-do data and semantic input?
+4. What minimal persistence interface, representation, and interruption guarantees work on Browser and ESP32?
+5. Which remaining display, input, timing, and storage seams are needed to keep the Browser and MCU implementations substantially shared?
+6. What resource measurements and limits demonstrate viability on the reference MCU?
 
-Record answers here only when evidence supports a decision. Record implementation detail in source documentation rather than expanding this plan.
+Record answers here only when evidence supports a project-level decision.
+Record implementation detail in source documentation rather than expanding
+this plan.
 
 ## 6. Later milestones
 

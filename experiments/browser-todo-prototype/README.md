@@ -1,7 +1,9 @@
 # Browser to-do prototype
 
-An isolated experiment for the current SilOS milestone: a Browser-first,
-minimal to-do application in real uLisp, with live value-to-display bindings.
+Completed and frozen on 25 August 2026. This Browser-first to-do experiment
+validated the architecture now adopted in the
+[SilOS plan](../../docs/design/SilOS_PLAN.md). Its implementation was promoted
+to [`src/`](../../src/); continue production work there.
 
 This tree deliberately begins with fresh, complete upstream source snapshots:
 
@@ -23,5 +25,5 @@ Experiment-owned configuration, ports, generated adapters, application code,
 and browser assets belong outside `third-party/`. Keeping that boundary makes
 both direct modifications and supporting adaptations explicit.
 
-See [plan.md](plan.md) for the active scope and [spike.md](spike.md) for
+See [plan.md](plan.md) for the historical scope and [spike.md](spike.md) for
 evidence gathered during the experiment.

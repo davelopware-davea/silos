@@ -1,12 +1,11 @@
 # Browser to-do prototype plan
 
-**Status:** In progress; the Browser boot/load, read-only StoreRef, bounded
-lifecycle/poke/UI-model, and browser-visible template-rendering proofs are
-complete, and their runtime implementation now follows the agreed SilOS code
-layout. The `store-row-add` representation and validation decision is next.
-Each phase pauses after its Browser visual check so the user can run
-`view-browser.sh` before the next phase begins. `build.sh` and `test.sh` are the
-stable from-any-directory Bash entry points for building and testing.
+**Status:** Completed and frozen on 25 August 2026. The Browser boot/load,
+read-only StoreRef, bounded lifecycle/poke/UI-model, and browser-visible
+template-rendering proofs supplied the accepted production baseline. The code
+was promoted to [`src/`](../../src/), and the authoritative
+[SilOS plan](../../docs/design/SilOS_PLAN.md) now owns all further work. Do not
+continue implementation in this experiment tree.
 
 **Project context:** [SilOS plan](../../docs/design/SilOS_PLAN.md).
 
@@ -60,10 +59,8 @@ stable from-any-directory Bash entry points for building and testing.
   CTest passed both tests (2/2) in 0.76 seconds after the move.
 - Leave `stash@{0}` (`codex-migration-pre-sync-2026-08-22`) untouched.
 
-**Next session, without beginning it:** decide and document the Lisp record
-representation and validation for `store-row-add`; implement create/edit/delete
-in separately delegated phases afterwards, verifying each phase against the
-browser-visible bound template, followed by persistence and restart behaviour.
+The former next steps—record representation, CRUD, and persistence—moved to
+the production milestone in the authoritative SilOS plan.
 
 ## Goal
 

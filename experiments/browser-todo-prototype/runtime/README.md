@@ -1,5 +1,8 @@
 # Browser to-do bootstrap proof
 
+> Historical implementation: this experiment is frozen. Its accepted baseline
+> was promoted to [`src/`](../../../src/); continue production work there.
+
 This target starts the existing FreeWisp cooperative Browser port with the new
 experiment's clean FreeRTOS and uLisp vendor trees. It then:
 

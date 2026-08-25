@@ -12,4 +12,4 @@
 
 ## Alive API metadata
 
-- When changing `docs/design/API-*.md` or the Browser to-do prototype's public uLisp built-ins, review and update `.vscode/silos-api-stubs.lisp`, then run `experiments/browser-todo-prototype/check_alive_api_stubs.py --update`. The default check runs under CTest and must pass after the review.
+- When changing `docs/design/API-*.md` or SilOS's public uLisp built-ins, review and update `.vscode/silos-api-stubs.lisp`, then run `src/check_alive_api_stubs.py --update`. The default check runs under CTest and must pass after the review.
