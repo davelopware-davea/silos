@@ -13,7 +13,9 @@ from pathlib import Path
 EXPERIMENT_DIR = Path(__file__).resolve().parent
 REPOSITORY_ROOT = EXPERIMENT_DIR.parents[1]
 STUB_PATH = REPOSITORY_ROOT / ".vscode" / "silos-api-stubs.lisp"
-RUNTIME_CMAKE_PATH = EXPERIMENT_DIR / "runtime" / "CMakeLists.txt"
+RUNTIME_BUILTINS_PATH = (
+    EXPERIMENT_DIR / "runtime" / "SilOS" / "uLisp" / "BuiltinEntries.inc"
+)
 DOC_PATHS = (
     REPOSITORY_ROOT / "docs" / "design" / "API-BoundQueueStore.md",
     REPOSITORY_ROOT / "docs" / "design" / "API-BoundQueueMQTT.md",
@@ -22,14 +24,14 @@ DOC_PATHS = (
 )
 FINGERPRINT_PREFIX = ";;; API docs SHA-256: "
 PUBLIC_HEADING = re.compile(
-    r"^#{2,4} `((?:store|mqtt|app|ui)-[a-z0-9-]+|require|import)`\s*$",
+    r"^#{2,4} `((?:store|mqtt|shell|ui)-[a-z0-9-]+)`\s*$",
     re.MULTILINE,
 )
 STUB_DEFINITION = re.compile(
     r"^\(def(?:un|macro) ([a-z][a-z0-9-]+)(?:\s|$)", re.MULTILINE
 )
 PUBLIC_BUILTIN = re.compile(
-    r'\{ \\"((?:store|mqtt|app|ui)-[a-z0-9-]+|require|import)\\",\s*fn_'
+    r'\{ "((?:store|mqtt|shell|ui)-[a-z0-9-]+)",\s*fn_'
 )
 
 
@@ -61,7 +63,7 @@ def stubbed_names(stub_text: str) -> set[str]:
 
 
 def implemented_names() -> set[str]:
-    return set(PUBLIC_BUILTIN.findall(normalised_text(RUNTIME_CMAKE_PATH)))
+    return set(PUBLIC_BUILTIN.findall(normalised_text(RUNTIME_BUILTINS_PATH)))
 
 
 def fail_for_name_drift(stub_text: str) -> None:

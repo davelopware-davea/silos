@@ -705,3 +705,135 @@ the code remains understandable and future changes remain reviewable?
 ### Next question
 
 What record representation and validation should `store-row-add` use?
+
+## 2026-08-24 - Shell API namespace migration
+
+### Question
+
+Can the Browser proof adopt a consistent Shell-owned public namespace while
+preserving its app registration, event-handler, and later-turn poke semantics?
+
+### Method
+
+- Renamed the manifest declaration to `shell-app-register`, the continuing
+  event-handler registration to `shell-app-on-event`, and the poke request to
+  `shell-request-poke` in the public built-in table, native adapters, versioned
+  Lisp sources, and runtime documentation.
+- Kept the handler's later `app-initialise` delivery and fresh `(poke . payload)`
+  events unchanged. The unrelated upstream uLisp LispLibrary `require` remains
+  a vendor facility; this prototype still does not implement the proposed
+  SilOS module require/import forms.
+- Updated the Alive drift check's public-name matcher for the `shell-*`
+  namespace and its input path to the real built-in table. Updated the current
+  plan's API spellings without changing its scope, approach, sequence, or
+  success criteria.
+
+### Observed result
+
+- A static scan found all three new forms in the built-in table and versioned
+  app sources, with no legacy public spellings outside preserved plan/journal
+  history and the vendor snapshot. The entry source remains within its fixed
+  64-row limit.
+- Python syntax validation passed for the Alive drift checker. Its default
+  check matched 43 documented public names and 20 implemented prototype
+  built-ins against the editor stubs and the refreshed API-document
+  fingerprint.
+- The Browser build could not be executed in this agent environment because
+  CMake and the Emscripten tools are not installed or available on `PATH`.
+
+### Next question
+
+What record representation and validation should `store-row-add` use?
+
+## 2026-08-25 - Uniform app event values
+
+### Question
+
+Can the Shell hide its internal poke delivery tag and give applications a
+uniform `(event-type parameter ...)` value with an explicit type accessor?
+
+### Method
+
+- Added `shell-event-type`, which validates a proper non-empty event list with
+  a leading symbol and returns that symbol.
+- Changed lifecycle delivery to `(app-initialise)` and changed
+  `shell-request-poke` delivery to reproduce its `(type arg ...)` request
+  directly. The native poke kind remains internal queue metadata.
+- Updated the to-do handler to dispatch on `shell-event-type` and read its
+  application-owned stage with zero-based `(nth 1 event)`.
+- Updated the Shell API, current experiment documentation, Alive metadata, and
+  public built-in registration together.
+
+### Observed result
+
+- The Alive metadata check passes with 44 documented names and 21 implemented
+  prototype built-ins, and `git diff --check` passes.
+- SBCL reads the complete to-do source and loads the editor stubs successfully.
+- The Browser build could not run in this environment because CMake is not
+  installed or available on `PATH`.
+
+### Next question
+
+What record representation and validation should `store-row-add` use?
+
+## 2026-08-25 - Lexical app-instance UI bindings
+
+### Question
+
+Can the to-do app keep its StoreRef and UI handles as private state across
+event turns instead of creating globals from inside event branches?
+
+### Method
+
+- Wrapped the template, StoreRef, UiRef, list, and mount bindings in one outer
+  `let` retained by the registered event-handler closure, and changed staged
+  initialisation to ordinary `setq` assignments.
+- Changed `ui-bind` from `(ui-bind name type value)` to `(ui-bind name type)`.
+  It now resolves an existing lexical binding first, then a global binding,
+  and roots that binding pair rather than its current value.
+- Changed rendering to follow the retained pair to its current value and
+  updated the UI API, related variable-binding discussion, current experiment
+  documentation, public built-in arity, and Alive metadata.
+
+### Observed result
+
+- The to-do source contains no `defvar` forms. SBCL reads it successfully, the
+  Alive metadata check passes with 44 documented names and 21 implemented
+  prototype built-ins, and `git diff --check` passes.
+- The Browser build could not run in this environment because CMake is not
+  installed or available on `PATH`.
+
+### Next question
+
+What record representation and validation should `store-row-add` use?
+
+## 2026-08-25 - Namespaced UI symbols and Shell-owned placement
+
+### Question
+
+Can the public Lisp vocabulary identify SilOS-owned symbols consistently while
+leaving all mount placement decisions to the Shell?
+
+### Method
+
+- Renamed the UI type constructor `list-of` to `ui-list-of`, the overflow mode
+  `chop` to `ui-chop`, and the Shell-owned lifecycle event
+  `app-initialise` to `shell-app-initialise`.
+- Reduced `ui-mount` from `(ui-mount template :region region)` to
+  `(ui-mount template)`. The app makes a resource available; the Shell alone
+  decides whether and where it appears.
+- Updated the API documents, prototype parser and built-in arity, to-do source,
+  current experiment documentation, and Alive metadata together.
+
+### Observed result
+
+- Static scans find no legacy spellings in the current API, runtime, or app
+  source. SBCL reads the to-do source, the Alive metadata check passes with 44
+  documented names and 21 implemented prototype built-ins, and
+  `git diff --check` passes.
+- The Browser build could not run in this environment because CMake is not
+  installed or available on `PATH`.
+
+### Next question
+
+What record representation and validation should `store-row-add` use?

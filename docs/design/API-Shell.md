@@ -18,17 +18,18 @@ and mounts that the Shell renders from those live values.
 
 | Public form | Purpose |
 | --- | --- |
-| [`app-declare`](#app-declare) | Describe an app to the Shell in restricted declaration mode. |
-| [`app-start`](#app-start) | Register the active app's bounded event handler. |
-| [`app-request-poke`](#app-request-poke) | Request one later-turn application-defined poke event. |
-| [`require`](#require) | Load a shared system API module once. |
-| [`import`](#import) | Load an app-private source module as a factory or bounded export. |
+| [`shell-app-register`](#shell-app-register) | Register an app descriptor with the Shell in restricted declaration mode. |
+| [`shell-app-on-event`](#shell-app-on-event) | Register the active app's bounded event handler. |
+| [`shell-event-type`](#shell-event-type) | Return the type symbol at the start of an app event. |
+| [`shell-request-poke`](#shell-request-poke) | Request one later-turn application-defined event. |
+| [`shell-module-require`](#shell-module-require) | Load a shared system API module once. |
+| [`shell-module-import`](#shell-module-import) | Load an app-private source module as a factory or bounded export. |
 
 ## Contents
 
 1. [Model](#model)
 2. [App index and declaration source](#app-index-and-declaration-source)
-3. [`app-declare`](#app-declare)
+3. [`shell-app-register`](#shell-app-register)
 4. [Loading and starting an app](#loading-and-starting-an-app)
 5. [Events, handlers, and Refs](#events-handlers-and-refs)
 6. [Reload](#reload)
@@ -76,24 +77,25 @@ These are logical store names. A FAT backend may map them to files; IndexedDB
 or SRAM may not. The Shell does not infer apps by scanning arbitrary stores.
 
 To catalogue an app, the Shell asks the uLisp task to read only `app.lisp` in a
-restricted **describe** mode. Describe mode permits one `app-declare` form with
-literal bounded values. It rejects `require`, `import`, `defun`, and ordinary
+restricted **describe** mode. Describe mode permits one `shell-app-register`
+form with literal bounded values. It rejects `shell-module-require`,
+`shell-module-import`, `defun`, and ordinary
 application side effects. Thus the Shell learns presentation requirements
 without loading executable code.
 
-## `app-declare`
+## `shell-app-register`
 
 ```lisp
-(app-declare
+(shell-app-register
   :name "To-do"
   :ideal-width 24
   :ideal-height 10
   :entry "apps/todo/src/main")
 ```
 
-`app-declare` is a native uLisp primitive. During describe mode it validates
-the declaration and emits a fixed-size native descriptor associated with the
-current index app ID:
+`shell-app-register` is a native uLisp primitive. During describe mode it
+validates the declaration and emits a fixed-size native descriptor associated
+with the current index app ID:
 
 ```text
 {
@@ -118,18 +120,18 @@ it.
 
 The entry source initialises state and finishes by registering an app instance.
 
-### `app-start`
+### `shell-app-on-event`
 
 ```lisp
-(app-start
+(shell-app-on-event
   (lambda (event)
     ;; Handle one bounded event and return.
     event))
 ```
 
-`app-start` associates the closure with the current app ID and retains it as a
-uLisp GC root. This is a working proposal; the exact event value and callback
-registration form remain open. The entry must return after setup; it must not
+`shell-app-on-event` associates the closure with the current app ID and retains
+it as a uLisp GC root. This is a working proposal; the exact callback
+registration form remains open. The entry must return after setup; it must not
 take ownership of the uLisp task with a permanent `(loop ...)`.
 
 ## Events, handlers, and Refs
@@ -152,35 +154,64 @@ unbounded synchronous watch chain. A FreeRTOS yield cannot switch to another
 app handler inside the same uLisp task, so multi-app fairness begins with short
 handlers and a bounded event queue.
 
-### Minimal lifecycle and poke event contract
+### Event values
 
-The first Shell event is deliberately small and explicit.  After a successful
-`app-start` registration, the Shell enqueues exactly one `app-initialise`
-event for that app.  It is delivered on a later uLisp event turn, never by
-calling the handler synchronously from `app-start`.  A stopped or reloaded app
-does not receive an event from its former generation; a new successful
-registration receives its own one `app-initialise` event.
+Every event delivered to an app is a proper list with this shape:
 
-### `app-request-poke`
+```lisp
+(event-type parameter ...)
+```
+
+`event-type` is a symbol. Its parameters and their positions are defined by
+that event type. Apps may use ordinary list operations such as `nth` to read
+them.
+
+### `shell-event-type`
+
+```lisp
+(shell-event-type event)
+```
+
+`shell-event-type` returns the first item in a valid app event. It makes the
+role of that item explicit at call sites and rejects values that are not proper
+event lists beginning with a symbol.
+
+### Minimal lifecycle and later-turn event contract
+
+The first Shell event is deliberately small and explicit. After a successful
+`shell-app-on-event` registration, the Shell enqueues exactly one
+`(shell-app-initialise)` event for that app. It is delivered on a later uLisp
+event turn, never by calling the handler synchronously from
+`shell-app-on-event`. A
+stopped or reloaded app does not receive an event from its former generation;
+a new successful registration receives its own one `(shell-app-initialise)` event.
+
+### `shell-request-poke`
 
 An app may ask the Shell to schedule one later-turn event with:
 
 ```lisp
-(app-request-poke arg ...)
+(shell-request-poke type arg ...)
 ```
 
-This is a **general**, variadic request: it has no Shell-native interpretation
-of its arguments.  On success the Shell copies its payload across the boundary
-and later calls the same app handler with a fresh event of this shape:
+This is a **general**, variadic request. `type` must be a symbol, but the Shell
+assigns no meaning to its value or to the remaining arguments. On success the
+Shell copies the complete event across the boundary and later calls the same
+app handler with a fresh event of this shape:
 
 ```lisp
-(poke . payload)
+(type arg ...)
 ```
 
-where `payload` is the proper list of `arg ...`.  The tag `poke` is Shell
-owned; every payload convention is application owned.  In particular `init`
-and numeric stages have no native meaning and must not become lifecycle
-special cases.
+The poke is only the internal mechanism used to queue this later turn; it is
+not part of the app-facing event value. Every event type and parameter
+convention supplied through `shell-request-poke` is application owned. In
+particular `init` and numeric stages have no native meaning and must not become
+lifecycle special cases.
+
+For example, `(shell-request-poke 'init 1)` later delivers `(init 1)`. For that
+event, `(shell-event-type event)` returns the symbol `init` and `(nth 1 event)`
+returns the stage number `1`; `nth` uses zero-based positions.
 
 The initial bounded profile accepts only serialisable values: `nil`, booleans,
 integers, symbols, strings of at most 48 UTF-8 bytes, and proper nested lists
@@ -226,24 +257,24 @@ builtin arity at runtime.
 Two provisional source-loading forms have distinct roles:
 
 ```lisp
-(require 'silos-store)               ; shared system API module
-(import "apps/todo/src/model")       ; app-private source module
+(shell-module-require 'silos-store)               ; shared system API module
+(shell-module-import "apps/todo/src/model")       ; app-private source module
 ```
 
-### `require`
+### `shell-module-require`
 
-`require` loads a shared system library once into deliberately global API
-names. It uses a bounded module catalogue mapping library names to stores, and
-must detect cycles and avoid repeat loads.
+`shell-module-require` loads a shared system library once into deliberately
+global API names. It uses a bounded module catalogue mapping library names to
+stores, and must detect cycles and avoid repeat loads.
 
-### `import`
+### `shell-module-import`
 
-`import` is a proposed native primitive for app-private source. Its store
-evaluates to a factory closure or bounded export value instead of top-level
-global `defun` definitions. The entry keeps that value in a lexical binding,
-so separate apps may use the same helper names without collision. The runtime
-may cache one factory per store ID, but each app instantiates private state
-separately.
+`shell-module-import` is a proposed native primitive for app-private source.
+Its store evaluates to a factory closure or bounded export value instead of
+top-level global `defun` definitions. The entry keeps that value in a lexical
+binding, so separate apps may use the same helper names without collision. The
+runtime may cache one factory per store ID, but each app instantiates private
+state separately.
 
 ## Ownership and memory
 

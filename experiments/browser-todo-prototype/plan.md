@@ -22,10 +22,11 @@ stable from-any-directory Bash entry points for building and testing.
   stale OneDrive checkout; its content was reconciled into `src` by
   Git-normalised hashes and verified against committed history through
   `e146103 feat: prove browser todo lifecycle and UI binding`.
-- The proof has a general queue-backed `(app-request-poke arg...)` boundary
-  that delivers fresh `(poke . payload)` values, a later-turn
-  `app-initialise`, application-owned `init` stages, one StoreRef watch, and
-  bounded UiRef/template/list/mount rendering of the two imported CSV rows.
+- The proof has a general queue-backed `(shell-request-poke type arg...)`
+  boundary that delivers fresh `(type arg...)` values, a later-turn
+  `(shell-app-initialise)`, application-owned `init` stages, one StoreRef
+  watch, and bounded UiRef/template/list/mount rendering of the two imported
+  CSV rows.
 - Source UI forms now match the general [UI API](../../docs/design/API-UI.md).
   The lifecycle/UI/cross-reference proof is checkpointed as `e146103 feat:
   prove browser todo lifecycle and UI binding`. The imported Lisp source has
@@ -114,7 +115,7 @@ The rationale and dependency rules are recorded in the dedicated
    experiment code.
 3. **[done]** Import versioned startup stores into an in-memory backend at
    Browser boot, discover the one `apps/<app-name>/app.lisp` manifest,
-   evaluate its `app-declare`, then load and start the declared uLisp to-do
+   evaluate its `shell-app-register`, then load and start the declared uLisp to-do
    entry source.
 4. **[done]** Implement a read-only StoreRef-backed to-do data path using the
    same volatile in-memory backend: pending-to-ready bind completion, bounded
@@ -164,7 +165,7 @@ The rationale and dependency rules are recorded in the dedicated
   `apps/<app-name>/app.lisp`. This is a one-app bootstrap shortcut, not the
   future catalogue design.
 - A manifest is evaluated directly and is trusted to contain only its one
-  documented `app-declare` form; restricted describe-mode validation is
+  documented `shell-app-register` form; restricted describe-mode validation is
   deferred.
 - The native bootstrap loads the declaration's `:entry` store internally. No
   Lisp-visible `ulisp-load-store` operation exists in this increment.
@@ -176,14 +177,20 @@ The rationale and dependency rules are recorded in the dedicated
   StoreRowRefs after a bounded storage completion reaches the uLisp task.
 - The app uses documented `store-watch` for that StoreRef's state change.
   The uLisp task snapshots the old pending/nil ref before updating it to ready,
-  then invokes the watch once with `(live old-value)`. `app-start` remains a
+  then invokes the watch once with `(live old-value)`. `shell-app-on-event` remains a
   separate, unused-in-this-proof app-level handler for future Shell events.
   This increment permits one rooted StoreRef watch for the active app; watch
   removal and release on app stop/reload are still deferred.
-- After `app-start`, the Shell queues one later-turn `app-initialise` event.
-  The app's generic two-stage poke sequence binds its StoreRef, then declares
-  and mounts the bounded StoreRef-backed to-do list. The proof currently
-  renders both imported rows through its UiRef and item-template metadata,
+- The app instance is one lexical environment retained by its event-handler
+  closure. Its template, StoreRef, UiRef, list, and mount handles do not become
+  globals. `ui-bind` retains the named lexical binding pair, so the same
+  location remains authoritative across later event turns.
+- After `shell-app-on-event`, the Shell queues one later-turn
+  `(shell-app-initialise)` event.
+  The app's generic two-stage later-turn event sequence binds its StoreRef,
+  then declares and mounts the bounded StoreRef-backed to-do list. The proof
+  currently renders both imported rows through its UiRef and item-template
+  metadata,
   including ordered template-owned literal text, to
   a small Browser DOM surface. The `browser-surface.html` launcher is staged
   beside the Emscripten output and receives only renderer-resolved state and

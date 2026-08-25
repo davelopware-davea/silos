@@ -48,7 +48,7 @@ void silos_capture_app_declaration(const char *name, int ideal_width,
   CurrentDeclaration.present = true;
 }
 
-void silos_record_app_start() { AppStarted = true; }
+void silos_record_app_on_event() { AppStarted = true; }
 
 void silos_serial_write(char value) {
   std::putchar(static_cast<unsigned char>(value));

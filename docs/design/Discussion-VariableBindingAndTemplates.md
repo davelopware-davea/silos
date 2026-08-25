@@ -99,10 +99,12 @@ The initial design uses separate FreeRTOS tasks for uLisp and the Shell UI:
 - Queues carry bounded commands, input, results, and completed-frame messages
   between owners. They do not carry pointers into the uLisp workspace.
 
-The UiRef registry associates a stable `UiRefId` with a uLisp global variable.
-An entry may cache the variable's global environment binding-pair pointer,
-while templates contain only `UiRefId` references. Consequently, if a cached
-pair moves, only the registry entry needs repair.
+The UiRef registry associates a stable `UiRefId` with a named uLisp binding.
+That binding may be lexical or global. An entry may retain the environment
+binding-pair pointer resolved when the UiRef is created, while templates contain
+only `UiRefId` references. The retained pair is a GC root for the UiRef's
+lifetime. Consequently, if a cached pair moves, only the registry entry needs
+repair.
 
 ## Rendering and synchronisation
 
@@ -207,7 +209,7 @@ The next experiment should establish:
 - the fixed capacities and memory cost of bindings, templates, instructions,
   literals, and format strings;
 - the safe handling of missing, unbound, expired, or wrong-type values;
-- whether cached binding-pair relocation or per-refresh symbol resolution is
-  simpler on the selected uLisp implementation; and
+- how cached binding-pair relocation is repaired on implementations with a
+  moving workspace; and
 - the measured workspace-lock duration and full-frame rendering latency on the
   Browser and reference MCU.

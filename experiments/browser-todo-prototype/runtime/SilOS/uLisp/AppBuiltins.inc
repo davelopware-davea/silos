@@ -1,9 +1,9 @@
-const char doc_appdeclare[] = "(app-declare :name string :ideal-width integer :ideal-height integer :entry string)\nRegisters the current app declaration during bootstrap.";
-const char doc_appstart[] = "(app-start handler)\nRegisters the current app event handler.";
+const char doc_shellappregister[] = "(shell-app-register :name string :ideal-width integer :ideal-height integer :entry string)\nRegisters the current app declaration during bootstrap.";
+const char doc_shellapponevent[] = "(shell-app-on-event handler)\nRegisters the current app event handler.";
 // The initial bootstrap deliberately trusts its one manifest.  It reads the
 // documented positional keyword/value shape and leaves manifest validation for
 // the later, bounded describe-mode experiment.
-object *fn_appdeclare (object *args, object *env) {
+object *fn_shellappregister (object *args, object *env) {
   (void) env;
   char name[32];
   char entry[48];

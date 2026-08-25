@@ -244,7 +244,7 @@ representations.
 `apps/todo/app.lisp` contains only the declaration, for example:
 
 ```lisp
-(app-declare
+(shell-app-register
   :name "To-do"
   :ideal-width 24
   :ideal-height 10
@@ -253,8 +253,9 @@ representations.
 
 The Shell obtains the candidate app ID and declaration-store ID from its small
 built-in or persisted app index. It asks the uLisp task to read that one source
-store in a restricted **describe** mode. That mode accepts one `app-declare`
-form with literal, bounded fields; it does not permit `require`, `defun`, or
+store in a restricted **describe** mode. That mode accepts one
+`shell-app-register` form with literal, bounded fields; it does not permit
+`shell-module-require`, `defun`, or
 ordinary app side effects. The native declaration handler validates the fields
 and sends a plain fixed-size `AppDescriptor` to the Shell UI task. The Shell
 stores it under the candidate app ID. It does not retain a Lisp function pointer
@@ -267,8 +268,9 @@ requirements dynamic, the loaded app can explicitly send a descriptor update
 later.
 
 When the user starts the app, the Shell resets/prepares the uLisp workspace and
-loads the manifest's `:entry` store. That entry uses global `require` for
-shared SilOS APIs and lexical `import` for app-private source modules it
+loads the manifest's `:entry` store. That entry uses global
+`shell-module-require` for shared SilOS APIs and lexical `shell-module-import`
+for app-private source modules it
 actually needs. Loading every store whose name looks like `apps/todo/src/*`
 would need ordering rules and would evaluate unused code, so the entry/import
 graph is preferable. A manifest may later list extra eager modules if a
@@ -641,15 +643,15 @@ and evaluate the source twice, potentially repeating initialisation side
 effects. SilOS therefore needs one small, opinionated extension rather than
 trying to give stores filesystem paths.
 
-### Storage-backed `require`
+### Storage-backed `shell-module-require`
 
-Keep the familiar source form:
+Expose the storage-backed operation under the Shell namespace:
 
 ```lisp
-(require 'silos-store)
+(shell-module-require 'silos-store)
 ```
 
-but make `require` resolve a **uLisp module name** through a small module
+`shell-module-require` resolves a **uLisp module name** through a small module
 catalogue to an ordinary source store:
 
 ```text
@@ -665,8 +667,8 @@ bootstrap. A later uLisp editor can maintain it as an ordinary
 `"system/ulisp/modules"` store. Either way, the values it names are ordinary
 editable source stores and the lookup is exact; there is no directory scan.
 
-The storage-aware `require` operation runs only in the uLisp task. It performs
-the following sequence:
+The storage-aware `shell-module-require` operation runs only in the uLisp task.
+It performs the following sequence:
 
 1. Look up the requested module name in a fixed-capacity runtime module table.
    If it is `loaded`, return without reading storage.
@@ -679,11 +681,11 @@ the following sequence:
 
 The runtime table is the actual module-level deduplication mechanism. It is
 global to the one running uLisp task, so two separately stored source modules
-that both require `todo-model` load it once. It should be keyed by module name
-and source-store identity, have a fixed small capacity, and be cleared when
-the Shell resets that uLisp workspace during an app reload. Stored source edits
-therefore do not alter an already loaded module; the next app reload starts a
-fresh table and reads current source again.
+that both call `shell-module-require` for `todo-model` load it once. It should
+be keyed by module name and source-store identity, have a fixed small capacity,
+and be cleared when the Shell resets that uLisp workspace during an app reload.
+Stored source edits therefore do not alter an already loaded module; the next
+app reload starts a fresh table and reads current source again.
 
 The native hook need not keep whole imported files in memory. Apart from the
 bounded input chunk and a small module-state entry, uLisp's ordinary workspace
@@ -699,16 +701,17 @@ returns to the recovery Shell and resets the workspace before the next attempt.
 Runtime lazy imports can be introduced later only if their failure semantics
 are worth the added recovery machinery.
 
-### Lexical `import` for app-private source
+### Lexical `shell-module-import` for app-private source
 
-Storage-backed `require` remains appropriate for **shared system libraries**:
-it installs deliberately global names such as the uLisp helpers in
-`silos-store`. It is not appropriate for two apps' private `model` or `ui`
+Storage-backed `shell-module-require` remains appropriate for **shared system
+libraries**: it installs deliberately global names such as the uLisp helpers
+in `silos-store`. It is not appropriate for two apps' private `model` or `ui`
 files, because top-level `defun` forms from both would share GlobalEnv.
 
-A small native `import` primitive evaluates a source store as one expression
-that returns a **module factory** or exported closure. It does not install the
-module's helper names as globals. A small to-do arrangement could be:
+A small native `shell-module-import` primitive evaluates a source store as one
+expression that returns a **module factory** or exported closure. It does not
+install the module's helper names as globals. A small to-do arrangement could
+be:
 
 ```lisp
 ;; apps/todo/src/model: its complete source evaluates to this factory
@@ -721,17 +724,17 @@ module's helper names as globals. A small to-do arrangement could be:
       event)))
 
 ;; apps/todo/src/main: the entry imports and instantiates the model
-(let ((model ((import "apps/todo/src/model"))))
-  (app-start
+(let ((model ((shell-module-import "apps/todo/src/model"))))
+  (shell-app-on-event
     (lambda (event) (model event))))
 ```
 
-`import` reads the named ordinary source store in bounded chunks and returns
-the factory closure. The entry calls that factory to create its private module
-instance, then keeps the returned closure in a lexical binding. A module with
-several exports can instead return a bounded association list of named
-closures. Its importing code keeps those values in local bindings; there is no
-global `defun` to collide with a calendar's similarly named helpers.
+`shell-module-import` reads the named ordinary source store in bounded chunks
+and returns the factory closure. The entry calls that factory to create its
+private module instance, then keeps the returned closure in a lexical binding.
+A module with several exports can instead return a bounded association list of
+named closures. Its importing code keeps those values in local bindings; there
+is no global `defun` to collide with a calendar's similarly named helpers.
 
 The runtime may cache one successfully read **factory** per source-store ID to
 avoid re-reading it. It must not treat a factory's result as a globally shared
@@ -743,9 +746,9 @@ workspace and are discarded on Shell app reload.
 
 With imports, one source store is best thought of as one **uLisp module** rather
 than necessarily the complete app. The catalogue names an app's entry module;
-its `require` forms bring in shared system modules and its `import` forms bring
-in app-private source stores. The app remains the catalogue identity plus its
-source modules and data stores.
+its `shell-module-require` forms bring in shared system modules and its
+`shell-module-import` forms bring in app-private source stores. The app remains
+the catalogue identity plus its source modules and data stores.
 
 ### One workspace, redefinition, and reload
 
@@ -756,7 +759,8 @@ overloads. One global symbol names one current definition.
 
 Native SilOS built-in names should be a reserved part of that environment.
 Applications may redefine their own uLisp globals during development, but must
-not override the C-backed storage, UI, import, or recovery primitives.
+not override the C-backed storage, UI, Shell module-loading, or recovery
+primitives.
 
 The pinned uLisp implementation does permit redefinition: evaluating another
 `defun` or `defvar` for an existing global symbol replaces the value in that
@@ -772,7 +776,7 @@ complete file/module reload:
 - definitions removed from the edited source remain in the workspace unless
   the loader knows and unbinds every symbol the old source owned;
 - two modules using the same global name collide; and
-- the module table intentionally makes ordinary `require` skip an already
+- the module table intentionally makes `shell-module-require` skip an already
   loaded module.
 
 The first Shell should therefore expose one simple, predictable operation:
@@ -802,7 +806,7 @@ its event-handler closure under the current app ID. For example, schematically:
 
 ```lisp
 ;; apps/todo/src/main: evaluated for this app only
-(app-start
+(shell-app-on-event
   (let ((items (store-bind "todo/items" '(desc status))))
     (let ((toggle
            (lambda (row) (setf (field (field row 'value) 'status) "done"))))
@@ -830,32 +834,32 @@ entry closure (or be passed explicitly as closures) rather than use top-level
 lexical module exports, loader-added name mangling, or a real package feature;
 prefixing every global function name is workable but a poor primary model.
 
-### Importing SilOS APIs
+### Loading SilOS APIs
 
-Applications need the same import mechanism to obtain the uLisp-facing SilOS
-APIs. Keep two layers distinct:
+Applications use the same module-loading mechanism to obtain the uLisp-facing
+SilOS APIs. Keep two layers distinct:
 
 ```text
 native bootstrap primitives              imported uLisp API modules
 ---------------------------              --------------------------
-require                                  silos/store
-storage read needed by require           silos/ui
+shell-module-require                     silos/store
+storage read needed by module loader     silos/ui
 bounded command/queue bridge             silos/app
 minimal error/recovery support           later shared helpers
 ```
 
 The left-hand set is deliberately tiny and compiled into the native runtime.
-It exists before any source store can be read, so `require` can resolve a
-module name and stream it from storage. It also provides the low-level native
-operations ultimately used by storage, UI, and Shell bridges.
+It exists before any source store can be read, so `shell-module-require` can
+resolve a module name and stream it from storage. It also provides the low-level
+native operations ultimately used by storage, UI, and Shell bridges.
 
 The right-hand set is ordinary uLisp source stored and loaded exactly like an
 application module. For example, an app might begin:
 
 ```lisp
-(require 'silos-store)
-(require 'silos-ui)
-(require 'silos-app)
+(shell-module-require 'silos-store)
+(shell-module-require 'silos-ui)
+(shell-module-require 'silos-app)
 ```
 
 `silos-store` can define friendly uLisp functions and constants over the native
@@ -877,7 +881,7 @@ uLisp name       C entry point       runtime argument rule
 ----------       -------------       ---------------------
 store-bind       fn_store_bind       minimum/maximum arity
 ui-ref-create    fn_ui_ref_create    minimum/maximum arity
-require          fn_require          minimum/maximum arity
+shell-module-require  fn_shell_module_require  minimum/maximum arity
 ```
 
 The pinned uLisp source's table entries contain exactly a name, a C function
@@ -887,16 +891,16 @@ up `store-bind`, checks the supplied argument count at runtime, and calls the
 registered C entry point with Lisp objects. Type and value checks are likewise
 performed by that C entry point or by its small uLisp wrapper.
 
-Thus `(require 'silos-store)` does not make `store-bind` callable for the first
-time. The primitive must already exist in the bootstrap table so that the
-module loader itself can operate. Instead, it loads the ordinary uLisp
+Thus `(shell-module-require 'silos-store)` does not make `store-bind` callable
+for the first time. The primitive must already exist in the bootstrap table so
+that the module loader itself can operate. Instead, it loads the ordinary uLisp
 definitions built *on* those primitives: convenient argument shaping, shared
 constants, application-level validation, and higher-level operations. A small
 call path is:
 
 ```text
-app source -> (require 'silos-store)
-           -> storage-backed require reads system/ulisp/silos-store
+app source -> (shell-module-require 'silos-store)
+           -> storage-backed module loader reads system/ulisp/silos-store
            -> defun definitions become uLisp globals
            -> app calls a wrapper or store-bind directly
            -> uLisp dispatches the registered C primitive
@@ -936,7 +940,7 @@ still takes effect only at the next explicit Shell reload.
 - Can the storage task serialise a stable ordered source view directly into the
   uLisp reader with a fixed, small buffer while concurrent edits are paused or
   rejected?
-- Can a small modification of uLisp's existing `require` safely pause for a
+- Can the `shell-module-require` implementation safely pause for a
   storage read, stream and evaluate a module, detect cycles, and recover after
   a failed module load?
 - What fixed module-catalogue and runtime-module-table capacities are adequate

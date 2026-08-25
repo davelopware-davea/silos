@@ -6,7 +6,7 @@ experiment's clean FreeRTOS and uLisp vendor trees. It then:
 1. preloads and imports the versioned `store-init/` tree into one
    fixed-capacity in-memory store catalogue;
 2. scans `apps/` for `apps/<app-name>/app.lisp` manifests;
-3. evaluates each manifest directly, capturing its `app-declare` result;
+3. evaluates each manifest directly, capturing its `shell-app-register` result;
 4. streams and evaluates the declared entry store; and
 5. proves that `store-bind` returns pending first, then the uLisp task receives
    a bounded completion, snapshots the old pending ref, exposes ready
@@ -14,9 +14,10 @@ experiment's clean FreeRTOS and uLisp vendor trees. It then:
    using the public `store-status`, `store-row-count`, `store-row-at`, and
    `store-row-field` accessors;
    and
-6. delivers one later-turn `app-initialise` event, copies and redelivers two
-   app-owned `poke` payloads without retaining Lisp pointers, and proves that
-   binding and mounting occur only in the application's requested stages; and
+6. delivers one later-turn `(shell-app-initialise)` event, copies and
+   redelivers two app-owned `(init stage)` events without retaining Lisp
+   pointers, and proves that binding and mounting occur only in the
+   application's requested stages; and
 7. declares a UiRef/item-template/bounded-list/mount with `ui-bind`, `ui-type`,
    `ui-template`, `ui-template-list`, `ui-field`, and `ui-text`, then renders
    template-owned literal text followed by both fields for each imported to-do
@@ -100,12 +101,18 @@ field-output, list-window, and list-state-text bounds remain unchanged.
 
 The entry registers two deliberately different callbacks. `store-watch`
 is the documented storage callback: it receives `(live old-value)` only after
-the live StoreRef has changed. `app-start` separately retains an app-level
-handler. It receives `app-initialise` later and uses two generic `poke` events
-to choose when to bind storage and when to mount the list. The Shell never
-interprets that app-owned stage data. Only one StoreRef watch is supported now,
-and its callback is rooted until the future app-stop/reload lifecycle releases
-it. There is no watch removal operation in this increment.
+the live StoreRef has changed. `shell-app-on-event` separately retains an
+app-level handler. It receives `(shell-app-initialise)` later and uses
+`shell-request-poke` to request two generic `(init stage)` events that choose
+when to bind storage and when to mount the list. The Shell never interprets
+that app-owned event type or stage data. Only one StoreRef watch is supported
+now, and its callback is rooted until the future app-stop/reload lifecycle
+releases it. There is no watch removal operation in this increment.
+
+The entry's template and live handles are private lexical bindings captured by
+the app event-handler closure. `ui-bind` resolves and roots the `todo-items`
+binding pair itself, so later redraws follow that location without promoting
+the app instance's state to uLisp globals.
 
 From any working directory, configure when needed and build with:
 

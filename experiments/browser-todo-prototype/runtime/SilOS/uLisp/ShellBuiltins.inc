@@ -1,4 +1,5 @@
-const char doc_apppoke[] = "(app-request-poke arg...)";
+const char doc_shelleventtype[] = "(shell-event-type event)";
+const char doc_shellrequestpoke[] = "(shell-request-poke type arg...)";
 object *SilosActiveHandler = NULL;
 bool SilosPokePending = false;
 // Copy one admissible Lisp value into a bounded flat native arena. The queue
@@ -65,11 +66,11 @@ object *silos_deserialise_value(const SerializedPayload &payload, std::uint8_t i
   error2("invalid serial event");
 }
 
-object *fn_appstart (object *args, object *env) {
+object *fn_shellapponevent (object *args, object *env) {
   (void) env;
   if (SilosActiveHandler != NULL) error2("app already started");
   SilosActiveHandler = first(args);
-  silos_record_app_start();
+  silos_record_app_on_event();
   ShellEvent initialise{};
   initialise.kind = ShellEventKind::AppInitialise;
   initialise.app_generation = ActiveAppGeneration;
@@ -77,9 +78,22 @@ object *fn_appstart (object *args, object *env) {
   return tee;
 }
 
-object *fn_apppoke (object *args, object *env) {
+object *fn_shelleventtype (object *args, object *env) {
+  (void) env;
+  object *event = first(args);
+  if (!consp(event) || !symbolp(first(event))) error2("invalid shell event");
+  object *item = event;
+  while (item != nil) {
+    if (!consp(item)) error2("invalid shell event");
+    item = rest(item);
+  }
+  return first(event);
+}
+
+object *fn_shellrequestpoke (object *args, object *env) {
   (void) env;
   if (SilosActiveHandler == NULL) error2("app is not started");
+  if (!symbolp(first(args))) error2("event type is not a symbol");
   if (SilosPokePending) error2("poke-pending");
   ShellRequest request{};
   request.app_generation = ActiveAppGeneration;
@@ -89,23 +103,23 @@ object *fn_apppoke (object *args, object *env) {
   return tee;
 }
 
-// The Shell only knows event tags and copied payloads. App conventions such as
-// `init` and its stage numbers are interpreted exclusively by the Lisp handler.
+// The native event kind controls delivery only. Every app-facing event is a
+// proper list whose first item is its type; app-owned types such as `init` and
+// their parameters are interpreted exclusively by the Lisp handler.
 void silos_ulisp_dispatch_shell_event(const ShellEvent &event) {
   if (event.app_generation != ActiveAppGeneration || SilosActiveHandler == NULL) return;
   object *event_value = nil;
   if (event.kind == ShellEventKind::AppInitialise) {
     AppInitialiseDelivered = true;
     AppObservedNoBindBeforeInit = SilosBoundStoreRef == nil;
-    event_value = silos_symbol("app-initialise");
+    object *type = silos_symbol("shell-app-initialise");
+    protect(type);
+    event_value = cons(type, nil);
+    unprotect();
   } else {
     SilosPokePending = false;
     ++AppPokeCount;
-    object *payload = silos_deserialise_value(event.payload, event.payload.root);
-    protect(payload);
-    object *tag = silos_symbol("poke");
-    event_value = cons(tag, payload);
-    unprotect();
+    event_value = silos_deserialise_value(event.payload, event.payload.root);
   }
   protect(event_value);
   object *arguments = cons(event_value, nil);
@@ -126,7 +140,7 @@ void silos_cleanup_active_app() {
   SilosActiveHandler = nil;
   SilosBoundStoreRef = nil;
   SilosBoundStoreWatch = nil;
-  SilosUiSourceRef = nil;
+  SilosUiSourceBinding = nil;
   SilosPokePending = false;
   SilosUiMounted = false;
   SilosUiTypeFieldCount = 0;

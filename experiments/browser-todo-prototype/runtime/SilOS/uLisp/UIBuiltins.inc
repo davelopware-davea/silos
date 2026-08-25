@@ -1,8 +1,8 @@
 const char doc_uitype[] = "(ui-type name (field type slot)...)";
-const char doc_uibind[] = "(ui-bind name type value)";
-const char doc_uitemplate[] = "(ui-template name (item type) (ui-text string | (ui-field item field) :width integer :overflow chop)...)";
+const char doc_uibind[] = "(ui-bind name type)";
+const char doc_uitemplate[] = "(ui-template name (item type) (ui-text string | (ui-field item field) :width integer :overflow ui-chop)...)";
 const char doc_uitemplatelist[] = "(ui-template-list name :source ui-ref :item-template template :offset integer :limit integer :pending string :empty string :error string)";
-const char doc_uimount[] = "(ui-mount list :region region)";
+const char doc_uimount[] = "(ui-mount list)";
 // This is intentionally a small real template registry, not a Todo-specific
 // print path. A declaration owns an exact-size instruction array and each
 // literal instruction owns an exact-size immutable string. Values remain in
@@ -22,7 +22,7 @@ struct SilosUiInstruction {
   char *literal = nullptr;
   int width = 0;
 };
-object *SilosUiSourceRef = NULL;
+object *SilosUiSourceBinding = NULL;
 char SilosUiTypeName[InMemoryFieldNameCapacity]{};
 SilosUiTypeField SilosUiTypeFields[SilosUiTypeFieldCapacity]{};
 std::size_t SilosUiTypeFieldCount = 0;
@@ -86,8 +86,10 @@ bool silos_ui_list_length(object *list, std::size_t &length) {
 }
 
 void silos_render_ui() {
-  if (!SilosUiMounted || SilosUiSourceRef == nil) return;
-  object *metadata = silos_find_field(SilosUiSourceRef, "meta");
+  if (!SilosUiMounted || SilosUiSourceBinding == nil) return;
+  object *source = cdr(SilosUiSourceBinding);
+  if (source == nil) return;
+  object *metadata = silos_find_field(source, "meta");
   object *status = metadata == nil ? nil : silos_find_field(cdr(metadata), "status");
   if (status == nil || silos_symbol_is(cdr(status), "pending")) {
     silos_ui_render_begin(UiRenderState::Pending, SilosUiPendingText);
@@ -100,7 +102,7 @@ void silos_render_ui() {
     std::printf("ui-list region=main state=error text=%s\\n", SilosUiErrorText);
     return;
   }
-  object *value = silos_find_field(SilosUiSourceRef, "value");
+  object *value = silos_find_field(source, "value");
   object *rows = value == nil ? nil : cdr(value);
   if (rows == nil) {
     silos_ui_render_begin(UiRenderState::Empty, SilosUiEmptyText);
@@ -190,7 +192,7 @@ bool silos_ui_template_preflight(object *specs, const char *item_parameter,
           !silos_symbol_name_is(third(spec), ":width") ||
           !integerp(second(cddr(spec))) ||
           !silos_symbol_name_is(first(cddr(cddr(spec))), ":overflow") ||
-          !silos_symbol_name_is(second(cddr(cddr(spec))), "chop")) return false;
+          !silos_symbol_name_is(second(cddr(cddr(spec))), "ui-chop")) return false;
       const int width = checkinteger(second(cddr(spec)));
       if (width < 1 || width > 32) return false;
     }
@@ -202,7 +204,7 @@ bool silos_ui_template_preflight(object *specs, const char *item_parameter,
 
 bool silos_ui_is_list_of_declared_type(object *declaration) {
   return consp(declaration) && listlength(declaration) == 2 &&
-      silos_symbol_name_is(first(declaration), "list-of") &&
+      silos_symbol_name_is(first(declaration), "ui-list-of") &&
       symbolp(second(declaration)) &&
       silos_symbol_name_is(second(declaration), SilosUiTypeName);
 }
@@ -259,9 +261,9 @@ object *fn_uibind (object *args, object *env) {
       !silos_ui_is_store_ref_list_of_declared_type(second(args))) {
     error2("invalid ui source");
   }
-  object *source = eval(third(args), env);
-  if (source != SilosBoundStoreRef) error2("invalid ui source");
-  SilosUiSourceRef = source;
+  object *binding = findpair(first(args), env);
+  if (binding == nil || cdr(binding) != SilosBoundStoreRef) error2("invalid ui source");
+  SilosUiSourceBinding = binding;
   SilosUiRefDeclared = true;
   SilosUiRefHandle = 1;
   return number(SilosUiRefHandle);
@@ -383,8 +385,8 @@ object *fn_uitemplatelist (object *args, object *env) {
 
 object *fn_uimount (object *args, object *env) {
   (void) env;
-  if (!SilosUiListDeclared || SilosUiMounted || checkinteger(first(args)) != SilosUiListHandle ||
-      !silos_symbol_is(second(args), ":region") || !symbolp(third(args))) error2("invalid ui mount");
+  if (!SilosUiListDeclared || SilosUiMounted ||
+      checkinteger(first(args)) != SilosUiListHandle) error2("invalid ui mount");
   SilosUiMounted = true;
   silos_render_ui();
   return number(4);

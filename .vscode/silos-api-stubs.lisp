@@ -7,20 +7,21 @@
 ;;;
 ;;; Keep these lambda lists aligned with docs/design/API-*.md while those
 ;;; documents remain the authoritative descriptions of the proposed APIs.
-;;; API docs SHA-256: b1555679495d3d176a20bdb30ba0db7ff23f4524302a3d4e4be6a87eebe644f0
+;;; API docs SHA-256: 3c755e5dc46c8819e4637cbd58b855149e7eb4d42a485cae2be8c641b264fa21
 
 (in-package #:cl-user)
 
-(shadow '(app-declare
-          app-request-poke
-          app-start
-          import
+(shadow '(shell-app-register
+          shell-app-on-event
+          shell-event-type
+          shell-module-import
+          shell-module-require
+          shell-request-poke
           mqtt-bind
           mqtt-publish
           mqtt-ref-update
           mqtt-ref-watch
           mqtt-subscribe
-          require
           store-bind
           store-create
           store-delete
@@ -176,31 +177,35 @@
 
 ;;; Shell API
 
-(defmacro app-declare (&rest options)
+(defmacro shell-app-register (&rest options)
   (declare (ignore options))
-  '(%silos-editor-only 'app-declare))
+  '(%silos-editor-only 'shell-app-register))
 
-(defun app-start (handler)
+(defun shell-app-on-event (handler)
   (declare (ignore handler))
-  (%silos-editor-only 'app-start))
+  (%silos-editor-only 'shell-app-on-event))
 
-(defun app-request-poke (&rest payload)
-  (declare (ignore payload))
-  (%silos-editor-only 'app-request-poke))
+(defun shell-event-type (event)
+  (declare (ignore event))
+  (%silos-editor-only 'shell-event-type))
 
-(defun require (library)
+(defun shell-request-poke (type &rest parameters)
+  (declare (ignore type parameters))
+  (%silos-editor-only 'shell-request-poke))
+
+(defun shell-module-require (library)
   (declare (ignore library))
-  (%silos-editor-only 'require))
+  (%silos-editor-only 'shell-module-require))
 
-(defun import (store-name)
+(defun shell-module-import (store-name)
   (declare (ignore store-name))
-  (%silos-editor-only 'import))
+  (%silos-editor-only 'shell-module-import))
 
 ;;; UI API. These declarations follow the API's current syntactic roles. The
 ;;; documents deliberately leave their final reader/macro implementation open.
 
-(defmacro ui-bind (name type initial-value)
-  (declare (ignore name type initial-value))
+(defmacro ui-bind (name type)
+  (declare (ignore name type))
   '(%silos-editor-only 'ui-bind))
 
 (defmacro ui-type (name &rest fields)
@@ -227,8 +232,8 @@
   (declare (ignore name options))
   '(%silos-editor-only 'ui-template-list))
 
-(defun ui-mount (template &key region)
-  (declare (ignore template region))
+(defun ui-mount (template)
+  (declare (ignore template))
   (%silos-editor-only 'ui-mount))
 
 (defun ui-invalidate (ui-ref)
