@@ -32,7 +32,7 @@ object *silos_make_pending_bind_ref () {
   metadata = silos_prepend_field("count", number(0), metadata);
   unprotect();
   protect(metadata);
-  object *pending = silos_symbol("pending");
+  object *pending = silos_symbol("silos-pending");
   metadata = silos_prepend_field("status", pending, metadata);
   unprotect();
   protect(metadata);
@@ -108,7 +108,7 @@ object *silos_make_store_row_ref (const InMemoryStoreRow &row,
   object *metadata = nil;
   metadata = silos_prepend_field("error", nil, metadata);
   protect(metadata);
-  object *ready = silos_symbol("ready");
+  object *ready = silos_symbol("silos-ready");
   metadata = silos_prepend_field("status", ready, metadata);
   unprotect();
   protect(metadata);
@@ -192,7 +192,9 @@ object *silos_store_row_status(object *row) {
 }
 
 object *silos_store_ref_ready_value(object *ref) {
-  if (!silos_symbol_is(silos_store_ref_status(ref), "ready")) error2("StoreRef is not ready");
+  if (!silos_symbol_is(silos_store_ref_status(ref), "silos-ready")) {
+    error2("StoreRef is not ready");
+  }
   object *value = silos_find_field(ref, "value");
   return cdr(value);
 }
@@ -269,8 +271,8 @@ object *fn_storerowerror (object *args, object *env) {
 object *fn_storerowfield (object *args, object *env) {
   (void) env;
   object *row = first(args);
-  if (!silos_symbol_is(silos_store_row_status(row), "ready") &&
-      !silos_symbol_is(silos_store_row_status(row), "saving")) {
+  if (!silos_symbol_is(silos_store_row_status(row), "silos-ready") &&
+      !silos_symbol_is(silos_store_row_status(row), "silos-saving")) {
     error2("StoreRowRef fields are not readable");
   }
   char name[InMemoryFieldNameCapacity];
@@ -360,7 +362,7 @@ void silos_ulisp_complete_store_bind(const StorageCompletion &completion) {
                                         binding.field_count, binding.start,
                                         binding.count);
   cdr(count) = number(listlength(cdr(value)));
-  cdr(status) = silos_symbol("ready");
+  cdr(status) = silos_symbol("silos-ready");
   configASSERT(binding.watch != nil);
   object *watch_arguments = cons(binding.ref, cons(old_snapshot, nil));
   const std::size_t previous_app = CurrentAppIndex;

@@ -62,24 +62,24 @@ row is a live **StoreRowRef** with separate metadata for that record:
 {
   meta: {
     operation: bind,
-    status: ready,
+    status: silos-ready,
     error: nil,
     count: 2
   },
   value: [
     {
-      meta: {id: 41, revision: 7, status: ready, error: nil},
+      meta: {id: 41, revision: 7, status: silos-ready, error: nil},
       value: {desc: "Buy milk", target: 20260820, status: "to do"}
     },
     {
-      meta: {id: 58, revision: 3, status: saving, error: nil},
+      meta: {id: 58, revision: 3, status: silos-saving, error: nil},
       value: {desc: "Call bank", target: nil, status: "done"}
     }
   ]
 }
 ```
 
-Before the request completes, the StoreRef has `pending` status and an empty or
+Before the request completes, the StoreRef has `silos-pending` status and an empty or
 nil value. Collection metadata describes request state, errors, and result
 membership. Row metadata contains the stable record ID, revision, and that
 row's binding/write state. Keeping application fields below `value` avoids a
@@ -120,9 +120,9 @@ queue a corresponding storage write:
 The binding metadata exposes progress and failure:
 
 ```text
-pending -> ready
-ready -> saving -> ready
-ready -> saving -> error
+silos-pending -> silos-ready
+silos-ready -> silos-saving -> silos-ready
+silos-ready -> silos-saving -> silos-error
 ```
 
 A successful commit updates the binding's revision or `changed` value. External
@@ -158,7 +158,8 @@ A bound row can be deleted directly:
 (store-row-delete row1)
 ```
 
-Its state progresses from `ready` through `deleting` to `deleted` or `error`.
+Its state progresses from `silos-ready` through `silos-deleting` to
+`silos-deleted` or `silos-error`.
 A deleted StoreRowRef retains tombstone metadata, including its ID and final
 revision, while its value becomes nil. Its parent collection subsequently
 removes it and notifies the relevant watches. `store-row-delete-id` is the
@@ -203,7 +204,7 @@ existing UI-binding idea:
 storage <-> StoreRef/StoreRowRefs in uLisp -> UI binding -> template
 ```
 
-A template can display `pending`, an error, or fields of the ready value. When
+A template can display `silos-pending`, an error, or fields of the ready value. When
 storage completes a request or reports a later change, the uLisp task updates
 the appropriate StoreRef or StoreRowRef and the UI observes it on a subsequent
 refresh. The storage and UI binding mechanisms remain separate but compose
@@ -248,8 +249,8 @@ Publishing returns an operation Ref whose status records progress:
 ```
 
 ```text
-pending -> queued -> sent -> acknowledged
-                         -> error
+silos-pending -> silos-queued -> silos-sent -> silos-acknowledged
+                                     -> silos-error
 ```
 
 The exact progression depends on MQTT QoS. Subscribing binds a bounded window
@@ -257,7 +258,7 @@ of immutable messages rather than binding each message independently:
 
 ```lisp
 (defvar inbox
-  (mqtt-subscribe "chat/inbox/+" 'fifo 5))
+  (mqtt-subscribe "chat/inbox/+" 'mqtt-fifo 5))
 ```
 
 Its conceptual shape is:
@@ -266,8 +267,8 @@ Its conceptual shape is:
 {
   meta: {
     operation: subscribe,
-    status: ready,
-    mode: fifo,
+    status: silos-ready,
+    mode: mqtt-fifo,
     limit: 5,
     waiting: 3,
     dropped: 0
@@ -285,7 +286,7 @@ be processing it. Instead, `meta.waiting` counts messages received since the
 window was last updated, and a watch reports that count:
 
 ```lisp
-(mqtt-ref-watch inbox
+(mqtt-watch inbox
   (lambda (live waiting)
     ...))
 ```
@@ -293,7 +294,7 @@ window was last updated, and a watch reports that count:
 The application advances the window explicitly when ready:
 
 ```lisp
-(mqtt-ref-update inbox)
+(mqtt-update inbox)
 ```
 
 Two initial modes cover different uses:

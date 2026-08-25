@@ -180,6 +180,6 @@ end reports that the data is stale and offers:
 The Shell needs a revision or equivalent change identity for this comparison,
 and must distinguish its own per-keystroke writes from an external change. If
 a UiRef is backed by a StoreRef or StoreRowRef, its UI status remains
-distinct from storage progress such as `saving` or `error`. The storage-write
+distinct from storage progress such as `silos-saving` or `silos-error`. The storage-write
 policy during an edit and the exact control sequence for choosing these two
 actions remain open.

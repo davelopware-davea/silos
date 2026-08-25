@@ -7,7 +7,7 @@
 ;;;
 ;;; Keep these lambda lists aligned with docs/design/API-*.md while those
 ;;; documents remain the authoritative descriptions of the proposed APIs.
-;;; API docs SHA-256: cf8eb490231f85021b8374e8877bf72d29b9a46803a69d8827d41a0fa48759bb
+;;; API docs SHA-256: e50a7b8b86fb44a405f7907533d198f12a363454b329d9e335e2e64c415d5259
 
 (in-package #:cl-user)
 
@@ -19,8 +19,8 @@
           shell-request-poke
           mqtt-bind
           mqtt-publish
-          mqtt-ref-update
-          mqtt-ref-watch
+          mqtt-update
+          mqtt-watch
           mqtt-subscribe
           store-bind
           store-create
@@ -163,13 +163,13 @@
   (declare (ignore filter mode limit))
   (%silos-editor-only 'mqtt-subscribe))
 
-(defun mqtt-ref-watch (mqtt-ref callback)
+(defun mqtt-watch (mqtt-ref callback)
   (declare (ignore mqtt-ref callback))
-  (%silos-editor-only 'mqtt-ref-watch))
+  (%silos-editor-only 'mqtt-watch))
 
-(defun mqtt-ref-update (mqtt-ref)
+(defun mqtt-update (mqtt-ref)
   (declare (ignore mqtt-ref))
-  (%silos-editor-only 'mqtt-ref-update))
+  (%silos-editor-only 'mqtt-update))
 
 (defun mqtt-bind (topic)
   (declare (ignore topic))

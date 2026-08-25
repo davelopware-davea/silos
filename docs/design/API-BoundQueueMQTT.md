@@ -76,7 +76,7 @@ Every MQTT operation returns an MqttRef immediately:
 {
   meta: {
     operation: subscribe,
-    status: pending,
+    status: silos-pending,
     error: nil
   },
   value: nil
@@ -92,8 +92,8 @@ publish | subscribe | bind
 Basic operation states are:
 
 ```text
-pending -> ready
-pending -> error
+silos-pending -> silos-ready
+silos-pending -> silos-error
 ```
 
 Publish and long-lived subscription Refs have additional states and metadata
@@ -142,8 +142,8 @@ Publishes one immutable payload and immediately returns an MqttRef with
 Its progress is conceptually:
 
 ```text
-pending -> queued -> sent -> acknowledged
-                         -> error
+silos-pending -> silos-queued -> silos-sent -> silos-acknowledged
+                                     -> silos-error
 ```
 
 The exact terminal state depends on QoS. A QoS 0 publish cannot promise broker
@@ -165,7 +165,7 @@ most `limit` immutable MessageRefs.
 
 ```lisp
 (defvar inbox
-  (mqtt-subscribe "chat/inbox/+" 'fifo 5))
+  (mqtt-subscribe "chat/inbox/+" 'mqtt-fifo 5))
 ```
 
 When ready, its conceptual shape is:
@@ -174,8 +174,8 @@ When ready, its conceptual shape is:
 {
   meta: {
     operation: subscribe,
-    status: ready,
-    mode: fifo,
+    status: silos-ready,
+    mode: mqtt-fifo,
     limit: 5,
     waiting: 3,
     dropped: 0,
@@ -193,18 +193,18 @@ processing it. New arrivals enter a bounded backlog and increase
 
 Two initial modes are proposed:
 
-- `fifo` consumes the current window and selects the next oldest waiting
+- `mqtt-fifo` consumes the current window and selects the next oldest waiting
   messages; it is intended for chat, commands, and ordered work;
-- `latest` selects the newest waiting messages and skips superseded arrivals;
+- `mqtt-latest` selects the newest waiting messages and skips superseded arrivals;
   it is intended for telemetry and dashboards.
 
 Mode is fixed when the subscription is created. Positional mutation, editing,
 and deletion of individual MessageRefs are not supported.
 
-### `mqtt-ref-watch`
+### `mqtt-watch`
 
 ```lisp
-(mqtt-ref-watch mqtt-ref
+(mqtt-watch mqtt-ref
   (lambda (live waiting)
     ...))
 ```
@@ -218,18 +218,18 @@ Notifications may be coalesced: application code must treat `waiting` as the
 current count rather than assuming one callback per message. The callback runs
 on the uLisp task.
 
-### `mqtt-ref-update`
+### `mqtt-update`
 
 ```lisp
-(mqtt-ref-update mqtt-ref)
+(mqtt-update mqtt-ref)
 ```
 
 Declares that the application has finished with the current window and updates
 that same MqttRef according to its mode.
 
-For `fifo`, the old window is consumed and replaced by up to `limit` oldest
-waiting messages. Later arrivals remain waiting. For `latest`, the old window
-is replaced by up to `limit` newest messages and older superseded arrivals are
+For `mqtt-fifo`, the old window is consumed and replaced by up to `limit` oldest
+waiting messages. Later arrivals remain waiting. For `mqtt-latest`, the old
+window is replaced by up to `limit` newest messages and older superseded arrivals are
 skipped.
 
 The update is asynchronous if loading the next window requires durable storage.
@@ -244,8 +244,8 @@ A subscription retains only:
 - a bounded backlog of message descriptors and payloads; and
 - fixed bookkeeping such as counts, limits, and watch handles.
 
-Transient subscriptions may use a bounded native RAM ring. A `latest` window
-of one value can often retain only the current and newest pending payload.
+Transient subscriptions may use a bounded native RAM ring. An `mqtt-latest`
+window of one value can often retain only the current and newest pending payload.
 
 Reliable chat or command subscriptions may spool arrivals into a
 BoundQueueStore store. For the initial SilOS chat use case, a FIFO subscription
@@ -284,7 +284,7 @@ Its conceptual shape is:
 {
   meta: {
     operation: bind,
-    status: pending,
+    status: silos-pending,
     topic: "house/temperature",
     error: nil
   },
@@ -343,6 +343,6 @@ roots; the exact release API remains open.
 - acknowledgement timing relative to durable storage;
 - payload types, encodings, maximum sizes, and binary buffer representation;
 - initial-window behaviour and update status transitions;
-- skipped-versus-dropped accounting for `latest` mode;
+- skipped-versus-dropped accounting for `mqtt-latest` mode;
 - retained binding watches, writes, conflicts, and deletion; and
 - whether any MQTT protocol metadata beyond the minimal fields is exposed.

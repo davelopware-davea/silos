@@ -75,6 +75,10 @@ This simple mechanism should cover a large proportion of ordinary UI output. Its
 - FreeRTOS is the task, queue, and timing substrate. The promoted implementation starts from FreeRTOS-Kernel V11.3.0, with target-specific ports behind the agreed platform boundaries.
 - As much portable system behaviour as practical—including applications, UI composition, shell behaviour, configuration, and services—will be written in the SilOS language.
 - C++ is reserved for the runtime, platform adaptation, primitive operations, and work whose hardware, timing, memory, or bootstrapping constraints require it.
+- Public SilOS-specific uLisp names must carry a recognisable prefix.
+  Project-wide states, kinds, and types use `silos-`; subsystem-specific
+  operations and values use their subsystem prefix. Accessors omit `ref` when
+  their subsystem and argument already make the Ref role clear.
 
 ### Adopted implementation architecture
 

@@ -450,7 +450,7 @@ format is still needed above FAT: for example, write a new version with a
 length, revision, checksum, and commit marker, then select the last complete
 version after reboot. A later implementation may use temporary files and
 replacement, but must test what card removal and interrupted writes actually
-guarantee. The StoreRef `error` state naturally represents a missing card,
+guarantee. The StoreRef `silos-error` state naturally represents a missing card,
 failed mount, full card, write failure, or failed revision check.
 
 This is a much smaller responsibility than implementing a filesystem. FAT owns
@@ -496,7 +496,8 @@ Yes. uLisp source should be an **ordinary bound store**. It uses the existing
 StoreRef and StoreRowRef model, the same backend and CRUD service, and the same
 two-way binding behaviour as application data. A uLisp program editor is then
 just another uLisp application: it binds the source rows, displays and edits
-them through UiRefs, and observes the normal `saving`, `ready`, and `error`
+them through UiRefs, and observes the normal `silos-saving`, `silos-ready`, and
+`silos-error`
 states.
 
 ```text

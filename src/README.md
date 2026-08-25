@@ -10,8 +10,9 @@ port with the pinned FreeRTOS and uLisp vendor trees. It currently:
 3. evaluates each manifest directly, capturing its `shell-app-register` result;
 4. streams and evaluates every declared entry store, retaining bounded per-app
    handlers and UI resources; and
-5. proves that `store-bind` returns pending first, then the uLisp task receives
-   a bounded completion, snapshots the old pending ref, exposes ready
+5. proves that `store-bind` returns `silos-pending` first, then the uLisp task
+   receives a bounded completion, snapshots the old `silos-pending` Ref,
+   exposes `silos-ready`
    StoreRowRefs, and invokes one `store-watch` callback on the uLisp task
    using the public `store-status`, `store-row-count`, `store-row-at`, and
    `store-row-field` accessors;
@@ -24,9 +25,9 @@ port with the pinned FreeRTOS and uLisp vendor trees. It currently:
    `ui-template`, `ui-template-list`, `ui-field`, and `ui-text`, then renders
    template-owned literal text followed by both fields for each imported to-do,
    plus a separately mounted `Count` template bound to the StoreRef's maintained
-   row-count property after the StoreRef reaches ready, alongside the
-   watch's ready status, bounded-row count, named `desc` field read, and
-   preserved pending/nil old snapshot; and
+   row-count property after the StoreRef reaches `silos-ready`, alongside the
+   watch's `silos-ready` status, bounded-row count, named `desc` field read, and
+   preserved `silos-pending`/nil old snapshot; and
 8. renders every app's mounted templates through separate app, template, list,
    row, and instruction traversal functions, and projects the resolved text into
    the generic `#silos-apps` Browser DOM surface. The startup proof includes a
@@ -184,7 +185,7 @@ normal CTest remains a stable baseline rather than a synthetic capacity demo.
 
 The page loads adjacent Emscripten JavaScript, WASM, and preloaded data files.
 `#silos-apps` contains one section per loaded app and one view per mount. When
-the to-do StoreRef becomes ready, its `.silos-template-list` contains the two
+the to-do StoreRef becomes `silos-ready`, its `.silos-template-list` contains the two
 bound rows. Each row begins with a `.silos-template-literal` containing `TODO:`, followed
 by `.silos-template-field` elements that retain the declared field name in
 `data-field` and display the template-width-chopped value. The page is a

@@ -66,8 +66,9 @@ A second template must reuse `headline-ui`, not call `ui-bind` again for
 `headline`.
 
 The accepted declared types in this increment are `string`, `integer`,
-`datetime`, a declared record type, `(ui-list-of TYPE)`, and
-`(store-ref (ui-list-of TYPE))`. Assigning a wrong type makes the UiRef `error`
+`silos-datetime`, a declared record type, `(ui-list-of TYPE)`, and
+`(store-ref (ui-list-of TYPE))`. Assigning a wrong type makes the UiRef
+`silos-error`
 and renders the applicable error state; it must not reinterpret memory.
 
 ## 2. Fixed-layout record types
@@ -79,7 +80,7 @@ and renders the applicable error state; it must not reinterpret memory.
   ;; Field names are compile-time names.  Slot numbers are the actual array
   ;; layout, so an item can be a normal three-element uLisp array.
   (desc   string   0)
-  (target datetime 1)
+  (target silos-datetime 1)
   (status string   2))
 ```
 
@@ -195,8 +196,9 @@ renders at most `limit` rows.  It does not allocate row instances, cache row
 values, or provide unbounded repeat, filtering, sorting, or virtual scrolling.
 
 For an ordinary list, `nil` selects `:empty`; otherwise the visible window is
-rendered.  For a StoreRef source, `pending` selects `:pending`, `error` selects
-`:error`, and `ready` selects `:empty` or the visible window using its current
+rendered.  For a StoreRef source, `silos-pending` selects `:pending`,
+`silos-error` selects `:error`, and `silos-ready` selects `:empty` or the visible
+window using its current
 collection of StoreRowRefs.  The supplied state text is a bounded literal
 owned by the list template.  Row-level StoreRowRef failure is rendered by the
 row's field formatter as an invalid value; this increment does not add a
@@ -229,7 +231,8 @@ The list declaration installs two internally owned watches when a StoreRef
 becomes its source: one collection watch for StoreRef state/membership and one
 `store-rows-watch` watch that follows its current rows.  Their callbacks
 run on the uLisp task only, mark the view dirty, and return.  Thus a
-`pending -> ready`, row insertion, deletion, field update, `saving`, or `error`
+`silos-pending -> silos-ready`, row insertion, deletion, field update,
+`silos-saving`, or `silos-error`
 transition causes a later redraw.  They never render synchronously and must not
 start an unbounded watch chain.
 

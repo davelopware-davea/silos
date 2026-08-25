@@ -54,7 +54,7 @@ conceptual shape parallel to a StoreRef:
 ```text
 {
   meta: {
-    status: ready | editing | stale | error,
+    status: silos-ready | silos-editing | silos-stale | silos-error,
     type: string | integer | ...,
     editable: true | false,
     revision: ...

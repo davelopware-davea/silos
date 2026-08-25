@@ -91,7 +91,7 @@ Rules currently proposed:
 {
   meta: {
     operation: bind,
-    status: pending,
+    status: silos-pending,
     count: 0,
     error: nil
   },
@@ -108,8 +108,8 @@ create | list | meta | delete | get | bind | add-row | delete-row
 The basic StoreRef status progression is:
 
 ```text
-pending -> ready
-pending -> error
+silos-pending -> silos-ready
+silos-pending -> silos-error
 ```
 
 The meaning of `value` depends on the operation.
@@ -121,7 +121,7 @@ The meaning of `value` depends on the operation.
   meta: {
     id: 41,
     revision: 7,
-    status: ready,
+    status: silos-ready,
     error: nil
   },
   value: {
@@ -146,15 +146,15 @@ generic field operation.
 (store-create name kind [schema])
 ```
 
-Creates an exact store name. Initial kinds are `rows` and `blob`; a row schema
-describes its fixed fields.
+Creates an exact store name. Initial kinds are `silos-rows` and `silos-blob`; a
+row schema describes its fixed fields.
 
 ```lisp
 (store-create "todo/items"
-  'rows
-  '((desc string) (target datetime) (status string)))
+  'silos-rows
+  '((desc string) (target silos-datetime) (status string)))
 
-(store-create "todo/icon" 'blob)
+(store-create "todo/icon" 'silos-blob)
 ```
 
 Returns a StoreRef with `operation: create`.
@@ -175,8 +175,8 @@ Its ready value is conceptually:
 
 ```text
 [
-  {name: "todo/items", kind: rows, count: 12, revision: 8},
-  {name: "todo/prefs", kind: rows, count: 3, revision: 2}
+  {name: "todo/items", kind: silos-rows, count: 12, revision: 8},
+  {name: "todo/prefs", kind: silos-rows, count: 3, revision: 2}
 ]
 ```
 
@@ -217,7 +217,7 @@ get`. `start` plus `count` avoids inclusive/exclusive end ambiguity.
 (store-bind name fields start count)
 ```
 
-Immediately returns a StoreRef with `operation: bind` and `status: pending`.
+Immediately returns a StoreRef with `operation: bind` and `status: silos-pending`.
 When ready, its value is an array of live StoreRowRefs:
 
 ```lisp
@@ -243,8 +243,9 @@ asynchronous state explicit and do not expose its internal representation.
 (store-status ref)
 ```
 
-Returns the StoreRef's status, initially `pending` and subsequently `ready` or
-`error`. Code must check for `ready` before reading an operation result.
+Returns the StoreRef's status, initially `silos-pending` and subsequently
+`silos-ready` or `silos-error`. Code must check for `silos-ready` before reading
+an operation result.
 
 #### `store-error`
 
@@ -252,8 +253,8 @@ Returns the StoreRef's status, initially `pending` and subsequently `ready` or
 (store-error ref)
 ```
 
-Returns the operation error when `(store-status ref)` is `error`; otherwise it
-returns `nil`. It does not itself imply that a result is ready.
+Returns the operation error when `(store-status ref)` is `silos-error`;
+otherwise it returns `nil`. It does not itself imply that a result is ready.
 
 #### `store-value`
 
@@ -261,9 +262,9 @@ returns `nil`. It does not itself imply that a result is ready.
 (store-value ref)
 ```
 
-Returns the operation-specific result only when the StoreRef is `ready`.
-Calling it for a `pending` or `error` StoreRef is a state error. The result
-shape depends on the operation: for example, `store-list` yields descriptors,
+Returns the operation-specific result only when the StoreRef is `silos-ready`.
+Calling it for a `silos-pending` or `silos-error` StoreRef is a state error. The
+result shape depends on the operation: for example, `store-list` yields descriptors,
 `store-row-add` yields one StoreRowRef, `store-get` yields an independent
 bounded snapshot, and `store-bind` yields a bounded live row result. The
 snapshot's public record representation remains to be specified.
@@ -300,10 +301,11 @@ raw list or record traversal:
 
 ### Store row accessors
 
-These accessors apply to a StoreRowRef. A row can be `ready`, `saving`,
-`deleting`, `deleted`, or `error` as its lifecycle changes. Its application
-fields are readable only while it is `ready` or `saving`; reading a deleted,
-deleting, or error row is a state error unless an accessor says otherwise.
+These accessors apply to a StoreRowRef. A row can be `silos-ready`,
+`silos-saving`, `silos-deleting`, `silos-deleted`, or `silos-error` as its
+lifecycle changes. Its application fields are readable only while it is
+`silos-ready` or `silos-saving`; reading a deleted, deleting, or error row is a
+state error unless an accessor says otherwise.
 
 #### `store-row-id`
 
@@ -338,7 +340,7 @@ field can be read or changed.
 (store-row-error row)
 ```
 
-Returns the row error when `(store-row-status row)` is `error`; otherwise it
+Returns the row error when `(store-row-status row)` is `silos-error`; otherwise it
 returns `nil`. It remains available without allowing field access to an error
 row.
 
@@ -348,7 +350,8 @@ row.
 (store-row-field row field)
 ```
 
-Returns application field `field` from a `ready` or `saving` StoreRowRef.
+Returns application field `field` from a `silos-ready` or `silos-saving`
+StoreRowRef.
 `field` must be a field declared by that row's store schema; an unknown field
 is a schema error. It never reads system metadata such as ID, revision,
 status, or error, which have their own accessors.
@@ -358,7 +361,8 @@ status, or error, which have their own accessors.
 ### Bound update
 
 `store-row-field` has corresponding `setf` setter semantics. Setting a schema
-field on a `ready` row updates it optimistically and queues the storage write:
+field on a `silos-ready` row updates it optimistically and queues the storage
+write:
 
 ```lisp
 (setf
@@ -366,7 +370,7 @@ field on a `ready` row updates it optimistically and queues the storage write:
   "done")
 ```
 
-The setter rejects a row that is not `ready`, an unknown schema field, or a
+The setter rejects a row that is not `silos-ready`, an unknown schema field, or a
 value that does not satisfy the schema. `setf` is deliberately supported here:
 the operation is a row-field update, not mutation of the underlying
 representation, and the setter is where the asynchronous write and validation
@@ -375,8 +379,8 @@ semantics are defined.
 The row state progresses as follows:
 
 ```text
-ready -> saving -> ready
-ready -> saving -> error
+silos-ready -> silos-saving -> silos-ready
+silos-ready -> silos-saving -> silos-error
 ```
 
 A successful write advances its revision. Conflict and failed-write recovery
@@ -401,8 +405,8 @@ StoreRowRef. Matching bound collections acquire the new row.
 Deletes a bound row. The StoreRowRef follows:
 
 ```text
-ready -> deleting -> deleted
-ready -> deleting -> error
+silos-ready -> silos-deleting -> silos-deleted
+silos-ready -> silos-deleting -> silos-error
 ```
 
 After success it retains tombstone metadata while its value becomes nil. Its

@@ -265,13 +265,13 @@ void silos_render_list_template(std::size_t app_index,
   if (source == nil) return;
   object *metadata = silos_find_field(source, "meta");
   object *status = metadata == nil ? nil : silos_find_field(cdr(metadata), "status");
-  if (status == nil || silos_symbol_is(cdr(status), "pending")) {
+  if (status == nil || silos_symbol_is(cdr(status), "silos-pending")) {
     UiPendingRendered = true;
     silos_ui_render_template_begin(app_index, mount_index, UiRenderState::Pending,
                                    list_template.pending, true);
     return;
   }
-  if (!silos_symbol_is(cdr(status), "ready")) {
+  if (!silos_symbol_is(cdr(status), "silos-ready")) {
     silos_ui_render_template_begin(app_index, mount_index, UiRenderState::Error,
                                    list_template.error, true);
     return;

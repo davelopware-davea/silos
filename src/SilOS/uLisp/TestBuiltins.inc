@@ -5,8 +5,9 @@
 object *fn_silostestwatchobservation (object *args, object *env) {
   (void) env;
   object *old_status = first(cdr(cdr(cdr(args))));
-  if (!silos_symbol_is(first(args), "ready") || checkinteger(second(args)) != 2 ||
-      !silos_symbol_is(old_status, "pending")) {
+  if (!silos_symbol_is(first(args), "silos-ready") ||
+      checkinteger(second(args)) != 2 ||
+      !silos_symbol_is(old_status, "silos-pending")) {
     error2("unexpected StoreRef watch observation");
   }
   cstring(checkstring(third(args)), StoreRefWatchObservedDescription,
