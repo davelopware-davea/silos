@@ -7,6 +7,8 @@ readonly BUILD_DIR="$SCRIPT_DIR/build"
 readonly SURFACE="$BUILD_DIR/browser-surface.html"
 readonly PORT="${1:-8765}"
 
+source "$SCRIPT_DIR/check-setup.sh"
+
 if [[ ! "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 1 || PORT > 65535 )); then
   echo "error: port must be an integer from 1 through 65535 (got '$PORT')." >&2
   exit 2

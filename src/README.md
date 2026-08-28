@@ -4,8 +4,8 @@ This is the production SilOS implementation, promoted from the successful
 Browser to-do prototype. The Browser target starts the cooperative FreeRTOS
 port with the pinned FreeRTOS and uLisp vendor trees. It currently:
 
-1. preloads and imports the versioned `store-init/` tree into one
-   fixed-capacity in-memory store catalogue;
+1. preloads and imports the versioned `store-init/` tree into one in-memory
+   store catalogue;
 2. scans `apps/` for `apps/<app-name>/app.lisp` manifests;
 3. evaluates each manifest directly, capturing its `shell-app-register` result;
 4. streams and evaluates the declared entry store; and
@@ -71,11 +71,13 @@ input, or persistence. Its public Lisp source never traverses StoreRef or
 StoreRowRef `meta`/`value` records directly; those compact association lists
 remain runtime-private behind the typed Store accessors.
 
-`SilOS/Store/InMemoryStoreBackend.{h,cpp}` contains the initial fixed-capacity
+`SilOS/Store/InMemoryStoreBackend.{h,cpp}` contains the initial in-memory
 catalogue. Every store has the same generic row representation: stable `id`
-and `revision` metadata plus a bounded array of named string fields. Therefore
-source rows use a `text` field while to-do rows use `desc` and `status`, without
-the backend knowing either shape.
+and `revision` metadata plus a bounded array of named string fields. Rows use a
+linked standard-library container and field values use dynamically sized
+strings, hidden behind the Store interface so a later target-appropriate block
+allocator can replace them. Therefore source rows use a `text` field while
+to-do rows use `desc` and `status`, without the backend knowing either shape.
 
 `SilOS/Platform/Browser/BrowserStoreInitLoader.cpp` traverses the
 Emscripten-preloaded `/store-init` virtual
@@ -93,11 +95,13 @@ binds `todo/items.csv`. Each `.lisp` line becomes an ordered generic row with a
 header becomes named application fields; every data row
 receives sequential loader-assigned IDs and revision `1`.
 
-The importer is deliberately bounded: at most 8 stores, 64 rows per store, 4
-fields per row, 15-character names, 255-character field values/source lines,
-and 4096 bytes per input file. CSV accepts LF or CRLF records, quoted commas,
-and doubled quotes; it rejects malformed quotes, lone CR, quoted line breaks,
-NUL bytes, unsupported extensions, and all capacity overflows.
+The importer currently accepts at most 8 stores, 4 fields per row, and
+15-character field names. Lisp source has one stable-ID row per line; source
+row counts, line lengths, and input file sizes are limited by available memory
+rather than fixed importer constants. CSV values remain limited to 255
+characters. CSV accepts LF or CRLF records, quoted commas, and doubled quotes;
+it rejects malformed quotes, lone CR, quoted line breaks, NUL bytes,
+unsupported extensions, and remaining capacity overflows.
 
 The item-template implementation has no instruction-count or `ui-text`
 literal-length cap. A successful `ui-template` declaration owns one exact-size
@@ -130,10 +134,20 @@ From any working directory, configure when needed and build with:
 bash /path/to/SilOS/src/build.sh
 ```
 
-`build.sh` activates no SDK itself: when first configuring, run it from a Bash
-environment (such as Git Bash or WSL) in which the Emscripten SDK has been
-activated and `emcmake`, CMake, and Ninja are on `PATH`. It refuses to overwrite
-an existing build configured with a non-Emscripten toolchain.
+`build.sh`, `test.sh`, and `view-browser.sh` first run `check-setup.sh`. The
+checker stops at the first missing or unusable prerequisite, prints the exact
+fix command, and, in an interactive terminal, offers to run it. It never changes
+the machine without confirmation. You can also run it directly:
+
+```bash
+bash /path/to/SilOS/src/check-setup.sh
+```
+
+If an installed Emscripten SDK is not active, the checker can activate it for
+the current workflow after confirmation. A directly executed checker cannot
+change its parent shell, so in that case it prints the `source` command that
+must be run in the current shell. The build refuses to overwrite an existing
+build configured with a non-Emscripten toolchain.
 
 Build and run CTest with:
 

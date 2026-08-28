@@ -8,6 +8,7 @@ const char doc_uimount[] = "(ui-mount list)";
 // literal instruction owns an exact-size immutable string. Values remain in
 // the uLisp StoreRef and are streamed during a Shell redraw.
 constexpr std::size_t SilosUiTypeFieldCapacity = 3;
+constexpr std::size_t SilosUiRenderedFieldCapacity = 256;
 struct SilosUiTypeField {
   char name[InMemoryFieldNameCapacity]{};
   int slot = -1;
@@ -131,7 +132,7 @@ void silos_render_ui() {
       if (field == nil || !stringp(cdr(field))) {
         std::printf(" %s=<invalid>", instruction.name);
       } else {
-        char rendered[InMemoryFieldValueCapacity]{};
+        char rendered[SilosUiRenderedFieldCapacity]{};
         cstring(cdr(field), rendered, sizeof(rendered));
         rendered[instruction.width < static_cast<int>(sizeof(rendered)) ?
                  instruction.width : static_cast<int>(sizeof(rendered)) - 1] = '\0';

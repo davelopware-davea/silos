@@ -21,18 +21,19 @@ object *fn_shellappregister (object *args, object *env) {
 
 namespace {
 const InMemoryStore *SilosCurrentSource = nullptr;
-std::size_t SilosCurrentRow = 0;
+InMemoryStore::const_iterator SilosCurrentRow;
 std::size_t SilosCurrentCharacter = 0;
 bool SilosSourceAtEnd = false;
 
 int silos_read_source_character() {
   while (SilosCurrentSource != nullptr &&
-         SilosCurrentRow < SilosCurrentSource->row_count) {
+         SilosCurrentRow != SilosCurrentSource->end()) {
     const InMemoryStoreField *text = SourceStores.find_field(
-        SilosCurrentSource->rows[SilosCurrentRow], "text");
+        *SilosCurrentRow, "text");
     configASSERT(text != nullptr);
-    const char character = text->value[SilosCurrentCharacter++];
-    if (character != '\0') return static_cast<unsigned char>(character);
+    if (SilosCurrentCharacter < text->value.size()) {
+      return static_cast<unsigned char>(text->value[SilosCurrentCharacter++]);
+    }
     ++SilosCurrentRow;
     SilosCurrentCharacter = 0;
     return '\n';
@@ -44,7 +45,7 @@ int silos_read_source_character() {
 
 bool silos_ulisp_evaluate(const InMemoryStore &store) {
   SilosCurrentSource = &store;
-  SilosCurrentRow = 0;
+  SilosCurrentRow = store.begin();
   SilosCurrentCharacter = 0;
   SilosSourceAtEnd = false;
   if (setjmp(toplevel_handler)) {

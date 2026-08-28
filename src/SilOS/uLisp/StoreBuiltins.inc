@@ -83,7 +83,7 @@ object *silos_make_store_row_ref (const InMemoryStoreRow &row,
         row, field_names[index - 1]);
     if (field == nullptr) continue;
     protect(value);
-    object *field_value = lispstring(const_cast<char *>(field->value));
+    object *field_value = lispstring(const_cast<char *>(field->value.c_str()));
     value = silos_prepend_field(field->name, field_value, value);
     unprotect();
   }
@@ -118,13 +118,19 @@ object *silos_make_store_row_refs (const InMemoryStore &store,
                                    std::size_t field_count, std::size_t start,
                                    std::size_t count) {
   object *rows = nil;
-  const std::size_t first = start < store.row_count ? start : store.row_count;
-  const std::size_t available = store.row_count - first;
+  const std::size_t row_count = store.row_count();
+  const std::size_t first = start < row_count ? start : row_count;
+  const std::size_t available = row_count - first;
   const std::size_t selected = count < available ? count : available;
-  for (std::size_t index = first + selected; index > first; --index) {
+  InMemoryStore::const_iterator first_row = store.begin();
+  std::advance(first_row, first);
+  InMemoryStore::const_iterator after_last_row = first_row;
+  std::advance(after_last_row, selected);
+  while (after_last_row != first_row) {
+    --after_last_row;
     protect(rows);
-    object *row = silos_make_store_row_ref(store.rows[index - 1], field_names,
-                                            field_count);
+    object *row = silos_make_store_row_ref(*after_last_row, field_names,
+                                           field_count);
     protect(row);
     rows = cons(row, rows);
     unprotect();

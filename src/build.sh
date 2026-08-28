@@ -7,13 +7,7 @@ readonly SOURCE_DIR="$SCRIPT_DIR"
 readonly BUILD_DIR="$SCRIPT_DIR/build"
 readonly CACHE="$BUILD_DIR/CMakeCache.txt"
 
-if ! command -v cmake >/dev/null 2>&1; then
-  cat >&2 <<'EOF'
-error: cmake is required to build the SilOS Browser target.
-Install CMake and ensure 'cmake' is on PATH, then rerun this script.
-EOF
-  exit 1
-fi
+source "$SCRIPT_DIR/check-setup.sh"
 
 if [[ -f "$CACHE" ]]; then
   if ! grep -qx 'EMSCRIPTEN:INTERNAL=1' "$CACHE"; then
@@ -28,22 +22,6 @@ EOF
     exit 1
   fi
 else
-  if ! command -v emcmake >/dev/null 2>&1; then
-    cat >&2 <<'EOF'
-error: emcmake is required to configure the SilOS Browser target.
-Activate the Emscripten SDK environment (for example, run emsdk_env.sh), then
-rerun this script.
-EOF
-    exit 1
-  fi
-  if ! command -v ninja >/dev/null 2>&1; then
-    cat >&2 <<'EOF'
-error: Ninja is required to configure the SilOS Browser target.
-Install Ninja and ensure 'ninja' is on PATH, then rerun this script.
-EOF
-    exit 1
-  fi
-
   echo "Configuring SilOS Browser target..."
   emcmake cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" -G Ninja
 fi

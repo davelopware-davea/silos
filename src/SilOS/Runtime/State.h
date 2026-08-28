@@ -7,6 +7,7 @@
 #include <cstdint>
 
 constexpr std::size_t StoreNameCapacity = InMemoryStoreNameCapacity;
+constexpr std::size_t StoreRefWatchObservedDescriptionCapacity = 256;
 
 struct AppDeclaration {
   char name[32]{};
@@ -49,4 +50,4 @@ extern bool StoreRefWatchObservedReady;
 extern bool StoreRefWatchObservedCount;
 extern bool StoreRefWatchObservedOldPending;
 extern bool StoreRefWatchObservedOldValueNil;
-extern char StoreRefWatchObservedDescription[InMemoryFieldValueCapacity];
+extern char StoreRefWatchObservedDescription[StoreRefWatchObservedDescriptionCapacity];

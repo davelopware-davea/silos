@@ -84,6 +84,7 @@ promoted to [`src/`](../../src/). The following general approach is locked:
 - one uLisp-owning task evaluates Lisp and owns its workspace, garbage collection, live references, and callbacks;
 - FreeRTOS queues carry bounded pointer-free messages between task owners;
 - uLisp applications are discovered and loaded from named stores through Shell-managed manifests and lifecycle events;
+- Lisp source stores preserve one editable source line per stable-ID Store row. The initial implementation uses dynamically sized linked rows and string values so line count and length are limited by available memory rather than arbitrary per-store constants; that backing remains hidden behind the Store interface for later replacement with measured, target-appropriate block allocation;
 - StoreRefs and UiRefs provide stable language-visible live references, while reusable flow templates describe presentation without a conventional application-owned UI tree;
 - portable Store, UI, Shell, and Runtime behaviour is separated from the uLisp and FreeRTOS adapters and from `Platform/<Target>` implementations; and
 - the Browser target uses Emscripten WebAssembly, cooperative fibers, preloaded startup stores, and a narrow Browser surface adapter.
@@ -188,7 +189,7 @@ they do not reopen its foundations.
 
 1. What uLisp record representation and validation rules should Store CRUD use?
 2. How are UiRefs, StoreRefs, watches, templates, and app-owned allocations released safely on reload or failure?
-3. Which fixed capacities and error behaviour are sufficient for editable to-do data and semantic input?
+3. Which remaining fixed capacities and error behaviour are sufficient for editable to-do data and semantic input?
 4. What minimal persistence interface, representation, and interruption guarantees work on Browser and ESP32?
 5. Which remaining display, input, timing, and storage seams are needed to keep the Browser and MCU implementations substantially shared?
 6. What resource measurements and limits demonstrate viability on the reference MCU?

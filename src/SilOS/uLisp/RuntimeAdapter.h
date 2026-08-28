@@ -1,6 +1,6 @@
 #pragma once
 
-struct InMemoryStore;
+class InMemoryStore;
 struct StorageCompletion;
 
 bool silos_ulisp_evaluate(const InMemoryStore &store);

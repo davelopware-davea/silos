@@ -6,11 +6,15 @@
 #include <cstdio>
 #include <cstring>
 #include <dirent.h>
+#include <new>
+#include <stdexcept>
+#include <string>
+#include <string_view>
 #include <sys/stat.h>
 
 namespace {
 constexpr std::size_t StoreInitPathCapacity = InMemoryStoreNameCapacity + 16;
-constexpr std::size_t StoreInitFileByteCapacity = 4096;
+constexpr std::size_t CsvFieldValueCapacity = 256;
 
 bool has_suffix(const char *text, const char *suffix) {
   const std::size_t text_length = std::strlen(text);
@@ -25,48 +29,51 @@ bool join_path(char destination[], std::size_t capacity, const char *parent,
   return written > 0 && static_cast<std::size_t>(written) < capacity;
 }
 
-bool read_file(const char *path, char content[], std::size_t capacity,
-               std::size_t &length) {
+bool read_file(const char *path, std::string &content) {
   struct stat details {};
-  if (stat(path, &details) != 0 || details.st_size < 0 ||
-      static_cast<std::size_t>(details.st_size) >= capacity) {
+  if (stat(path, &details) != 0 || details.st_size < 0) return false;
+  const std::uintmax_t file_size = static_cast<std::uintmax_t>(details.st_size);
+  if (file_size > content.max_size()) return false;
+  const std::size_t length = static_cast<std::size_t>(file_size);
+  try {
+    content.resize(length);
+  } catch (const std::bad_alloc &) {
+    return false;
+  } catch (const std::length_error &) {
     return false;
   }
   std::FILE *file = std::fopen(path, "rb");
   if (file == nullptr) return false;
-  length = std::fread(content, 1, static_cast<std::size_t>(details.st_size), file);
-  const bool read_complete = length == static_cast<std::size_t>(details.st_size) &&
-                             std::ferror(file) == 0;
+  const std::size_t bytes_read = std::fread(content.data(), 1, length, file);
+  const bool read_complete = bytes_read == length && std::ferror(file) == 0;
   const bool closed = std::fclose(file) == 0;
   const bool succeeded = read_complete && closed &&
-                         std::memchr(content, '\0', length) == nullptr;
-  if (!succeeded) return false;
-  content[length] = '\0';
-  return true;
+                         std::memchr(content.data(), '\0', length) == nullptr;
+  return succeeded;
 }
 
-bool append_source_lines(const char *store_name, const char content[],
-                         std::size_t length, InMemoryStoreBackend &stores,
+bool append_source_lines(const char *store_name, const std::string &content,
+                         InMemoryStoreBackend &stores,
                          StoreInitLoadResult &result) {
   if (!stores.create_store(store_name)) return false;
   std::size_t line_start = 0;
   std::uint32_t id = 1;
-  while (line_start < length) {
+  while (line_start < content.size()) {
     std::size_t line_end = line_start;
-    while (line_end < length && content[line_end] != '\n' && content[line_end] != '\r') {
+    while (line_end < content.size() && content[line_end] != '\n' &&
+           content[line_end] != '\r') {
       ++line_end;
     }
     const std::size_t line_length = line_end - line_start;
-    if (line_length >= InMemoryFieldValueCapacity || id == 0) return false;
-    char line[InMemoryFieldValueCapacity]{};
-    std::memcpy(line, content + line_start, line_length);
+    if (id == 0) return false;
+    const std::string_view line(content.data() + line_start, line_length);
     const InMemoryStoreFieldInput field{"text", line};
     if (!stores.append_row(store_name, id++, 1, &field, 1)) return false;
     ++result.source_row_count;
 
-    if (line_end == length) break;
+    if (line_end == content.size()) break;
     if (content[line_end] == '\r' &&
-        (line_end + 1 == length || content[line_end + 1] != '\n')) {
+        (line_end + 1 == content.size() || content[line_end + 1] != '\n')) {
       return false;  // Reject ambiguous legacy line endings deterministically.
     }
     line_start = line_end + (content[line_end] == '\r' ? 2 : 1);
@@ -77,7 +84,7 @@ bool append_source_lines(const char *store_name, const char content[],
 enum class CsvRecordResult { Record, End, Malformed };
 
 CsvRecordResult read_csv_record(const char *&cursor,
-                                char values[][InMemoryFieldValueCapacity],
+                                char values[][CsvFieldValueCapacity],
                                 std::size_t &value_count) {
   if (*cursor == '\0') return CsvRecordResult::End;
   value_count = 0;
@@ -93,7 +100,7 @@ CsvRecordResult read_csv_record(const char *&cursor,
       const char character = *cursor;
       if (quoted && character == '"') {
         if (cursor[1] == '"') {
-          if (value_length + 1 >= InMemoryFieldValueCapacity) {
+          if (value_length + 1 >= CsvFieldValueCapacity) {
             return CsvRecordResult::Malformed;
           }
           value[value_length++] = '"';
@@ -113,7 +120,7 @@ CsvRecordResult read_csv_record(const char *&cursor,
       if (quoted && (character == '\n' || character == '\r')) {
         return CsvRecordResult::Malformed;
       }
-      if (value_length + 1 >= InMemoryFieldValueCapacity) {
+      if (value_length + 1 >= CsvFieldValueCapacity) {
         return CsvRecordResult::Malformed;
       }
       value[value_length++] = character;
@@ -145,7 +152,7 @@ bool append_csv_rows(const char *store_name, const char content[],
                      InMemoryStoreBackend &stores, StoreInitLoadResult &result) {
   if (!stores.create_store(store_name)) return false;
   const char *cursor = content;
-  char headers[InMemoryFieldsPerRowCapacity][InMemoryFieldValueCapacity]{};
+  char headers[InMemoryFieldsPerRowCapacity][CsvFieldValueCapacity]{};
   std::size_t field_count = 0;
   if (read_csv_record(cursor, headers, field_count) != CsvRecordResult::Record ||
       field_count == 0) {
@@ -163,7 +170,7 @@ bool append_csv_rows(const char *store_name, const char content[],
 
   std::uint32_t id = 1;
   for (;;) {
-    char values[InMemoryFieldsPerRowCapacity][InMemoryFieldValueCapacity]{};
+    char values[InMemoryFieldsPerRowCapacity][CsvFieldValueCapacity]{};
     std::size_t value_count = 0;
     const CsvRecordResult parsed = read_csv_record(cursor, values, value_count);
     if (parsed == CsvRecordResult::End) return true;
@@ -181,14 +188,13 @@ bool append_csv_rows(const char *store_name, const char content[],
 
 bool import_file(const char *full_path, const char *store_name,
                  InMemoryStoreBackend &stores, StoreInitLoadResult &result) {
-  char content[StoreInitFileByteCapacity + 1]{};
-  std::size_t length = 0;
-  if (!read_file(full_path, content, sizeof(content), length)) return false;
+  std::string content;
+  if (!read_file(full_path, content)) return false;
   bool imported = false;
   if (has_suffix(store_name, ".lisp")) {
-    imported = append_source_lines(store_name, content, length, stores, result);
+    imported = append_source_lines(store_name, content, stores, result);
   } else if (has_suffix(store_name, ".csv")) {
-    imported = append_csv_rows(store_name, content, stores, result);
+    imported = append_csv_rows(store_name, content.c_str(), stores, result);
   } else {
     return false;
   }

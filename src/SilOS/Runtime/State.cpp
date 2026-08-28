@@ -23,4 +23,4 @@ bool StoreRefWatchObservedReady = false;
 bool StoreRefWatchObservedCount = false;
 bool StoreRefWatchObservedOldPending = false;
 bool StoreRefWatchObservedOldValueNil = false;
-char StoreRefWatchObservedDescription[InMemoryFieldValueCapacity]{};
+char StoreRefWatchObservedDescription[StoreRefWatchObservedDescriptionCapacity]{};

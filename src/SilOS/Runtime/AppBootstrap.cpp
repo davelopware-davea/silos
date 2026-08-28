@@ -22,7 +22,7 @@ bool silos_bootstrap_apps(InMemoryStoreBackend &stores) {
   bool found_manifest = false;
   bool loaded = true;
   stores.visit([&](const InMemoryStore &store) {
-    if (!is_app_manifest_name(store.name)) return;
+    if (!is_app_manifest_name(store.name())) return;
     found_manifest = true;
     silos_cleanup_active_app();
     ++ActiveAppGeneration;
@@ -31,7 +31,7 @@ bool silos_bootstrap_apps(InMemoryStoreBackend &stores) {
     loaded = silos_ulisp_evaluate(store) && CurrentDeclaration.present && loaded;
     const InMemoryStore *entry = stores.get(CurrentDeclaration.entry);
     loaded = entry != nullptr && silos_ulisp_evaluate(*entry) && AppStarted && loaded;
-    std::printf("manifest=%s app=%s entry=%s started=%s\n", store.name,
+    std::printf("manifest=%s app=%s entry=%s started=%s\n", store.name(),
                 CurrentDeclaration.name, CurrentDeclaration.entry,
                 AppStarted ? "yes" : "no");
   });
