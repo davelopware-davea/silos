@@ -84,6 +84,8 @@ promoted to [`src/`](../../src/). The following general approach is locked:
 - one uLisp-owning task evaluates Lisp and owns its workspace, garbage collection, live references, and callbacks;
 - FreeRTOS queues carry bounded pointer-free messages between task owners;
 - uLisp applications are discovered and loaded from named stores through Shell-managed manifests and lifecycle events;
+- the runtime keeps a bounded set of applications loaded together, with per-app handlers, Store bindings, UiRefs, types, templates, mounts, and generation-tagged event routing;
+- a full UI refresh traverses visible apps and each app's mounted templates; list templates traverse their bounded row window and apply an item template, while non-list templates render once;
 - Lisp source stores preserve one editable source line per stable-ID Store row. The initial implementation uses dynamically sized linked rows and string values so line count and length are limited by available memory rather than arbitrary per-store constants; that backing remains hidden behind the Store interface for later replacement with measured, target-appropriate block allocation;
 - StoreRefs and UiRefs provide stable language-visible live references, while reusable flow templates describe presentation without a conventional application-owned UI tree;
 - portable Store, UI, Shell, and Runtime behaviour is separated from the uLisp and FreeRTOS adapters and from `Platform/<Target>` implementations; and

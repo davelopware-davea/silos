@@ -7,7 +7,7 @@
 ;;;
 ;;; Keep these lambda lists aligned with docs/design/API-*.md while those
 ;;; documents remain the authoritative descriptions of the proposed APIs.
-;;; API docs SHA-256: 3c755e5dc46c8819e4637cbd58b855149e7eb4d42a485cae2be8c641b264fa21
+;;; API docs SHA-256: cf8eb490231f85021b8374e8877bf72d29b9a46803a69d8827d41a0fa48759bb
 
 (in-package #:cl-user)
 
@@ -216,8 +216,8 @@
   (declare (ignore item field-name))
   '(%silos-editor-only 'ui-field))
 
-(defmacro ui-template (name item-binding &body instructions)
-  (declare (ignore name item-binding instructions))
+(defmacro ui-template (name &rest declaration)
+  (declare (ignore name declaration))
   '(%silos-editor-only 'ui-template))
 
 (defmacro ui-text (value &key width overflow)

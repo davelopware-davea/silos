@@ -8,25 +8,29 @@ port with the pinned FreeRTOS and uLisp vendor trees. It currently:
    store catalogue;
 2. scans `apps/` for `apps/<app-name>/app.lisp` manifests;
 3. evaluates each manifest directly, capturing its `shell-app-register` result;
-4. streams and evaluates the declared entry store; and
+4. streams and evaluates every declared entry store, retaining bounded per-app
+   handlers and UI resources; and
 5. proves that `store-bind` returns pending first, then the uLisp task receives
    a bounded completion, snapshots the old pending ref, exposes ready
    StoreRowRefs, and invokes one `store-watch` callback on the uLisp task
    using the public `store-status`, `store-row-count`, `store-row-at`, and
    `store-row-field` accessors;
    and
-6. delivers one later-turn `(shell-app-initialise)` event, copies and
-   redelivers two app-owned `(init stage)` events without retaining Lisp
-   pointers, and proves that binding and mounting occur only in the
-   application's requested stages; and
+6. delivers a later-turn `(shell-app-initialise)` event to each app, routes
+   copied app-owned events by app index and generation without retaining Lisp
+   pointers, and proves that binding and mounting occur only in the requesting
+   app's stages; and
 7. declares a UiRef/item-template/bounded-list/mount with `ui-bind`, `ui-type`,
    `ui-template`, `ui-template-list`, `ui-field`, and `ui-text`, then renders
-   template-owned literal text followed by both fields for each imported to-do
-   after the StoreRef reaches ready, alongside the
+   template-owned literal text followed by both fields for each imported to-do,
+   plus a separately mounted `Count` template bound to the StoreRef's maintained
+   row-count property after the StoreRef reaches ready, alongside the
    watch's ready status, bounded-row count, named `desc` field read, and
    preserved pending/nil old snapshot; and
-8. projects those renderer-resolved list fields into the `#silos-app` Browser
-   DOM surface without adding input handling or a browser-to-store path.
+8. renders every app's mounted templates through separate app, template, list,
+   row, and instruction traversal functions, and projects the resolved text into
+   the generic `#silos-apps` Browser DOM surface. The startup proof includes a
+   second app with a directly mounted non-list template.
 
 This implementation exercises the corresponding subset of the
 [UI API](../docs/design/API-UI.md). The FreeRTOS/uLisp, Ref, flow-template,
@@ -119,8 +123,8 @@ the live StoreRef has changed. `shell-app-on-event` separately retains an
 app-level handler. It receives `(shell-app-initialise)` later and uses
 `shell-request-poke` to request two generic `(init stage)` events that choose
 when to bind storage and when to mount the list. The Shell never interprets
-that app-owned event type or stage data. Only one StoreRef watch is supported
-now, and its callback is rooted until the future app-stop/reload lifecycle
+that app-owned event type or stage data. Only one StoreRef watch per app is
+supported now, and each callback is rooted until the future app-stop/reload lifecycle
 releases it. There is no watch removal operation in this increment.
 
 The entry's template and live handles are private lexical bindings captured by
@@ -174,8 +178,9 @@ keeps its original three instructions (`TODO:`, description, status), so the
 normal CTest remains a stable baseline rather than a synthetic capacity demo.
 
 The page loads adjacent Emscripten JavaScript, WASM, and preloaded data files.
-When its StoreRef becomes ready, `#silos-todo-list` contains the two bound rows.
-Each row begins with a `.silos-template-literal` containing `TODO:`, followed
+`#silos-apps` contains one section per loaded app and one view per mount. When
+the to-do StoreRef becomes ready, its `.silos-template-list` contains the two
+bound rows. Each row begins with a `.silos-template-literal` containing `TODO:`, followed
 by `.silos-template-field` elements that retain the declared field name in
 `data-field` and display the template-width-chopped value. The page is a
 one-way display adapter: it does not handle input or call back into the Store.

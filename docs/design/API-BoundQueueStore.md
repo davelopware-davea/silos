@@ -92,6 +92,7 @@ Rules currently proposed:
   meta: {
     operation: bind,
     status: pending,
+    count: 0,
     error: nil
   },
   value: nil
@@ -225,6 +226,9 @@ When ready, its value is an array of live StoreRowRefs:
 ```
 
 The StoreRef's metadata describes the request, errors, and result membership.
+For row-result operations, `meta.count` is maintained with the current bounded
+result and is available to native UI projection; application code reads it
+through `store-row-count`.
 Each StoreRowRef has its own stable ID, revision, status, error, and value.
 Record identity never depends on the row's current array index.
 
@@ -270,7 +274,7 @@ snapshot's public record representation remains to be specified.
 (store-row-count ref)
 ```
 
-Returns the number of StoreRowRefs in a ready `store-bind` StoreRef. Calling
+Returns the maintained `count` property of a ready `store-bind` StoreRef. Calling
 it for a non-ready StoreRef, or for a ready ref whose operation does not yield
 a live row result, is a state/type error.
 

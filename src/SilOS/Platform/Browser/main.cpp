@@ -41,14 +41,19 @@ constexpr configSTACK_DEPTH_TYPE ClientTaskStackBytes = 32768U;
 // the explicit integration seam in the vendored sketch.
 void silos_capture_app_declaration(const char *name, int ideal_width,
                                    int ideal_height, const char *entry) {
-  std::snprintf(CurrentDeclaration.name, sizeof(CurrentDeclaration.name), "%s", name);
-  CurrentDeclaration.ideal_width = ideal_width;
-  CurrentDeclaration.ideal_height = ideal_height;
-  std::snprintf(CurrentDeclaration.entry, sizeof(CurrentDeclaration.entry), "%s", entry);
-  CurrentDeclaration.present = true;
+  configASSERT(CurrentAppIndex < AppCount);
+  AppDeclaration &declaration = AppDeclarations[CurrentAppIndex];
+  std::snprintf(declaration.name, sizeof(declaration.name), "%s", name);
+  declaration.ideal_width = ideal_width;
+  declaration.ideal_height = ideal_height;
+  std::snprintf(declaration.entry, sizeof(declaration.entry), "%s", entry);
+  declaration.present = true;
 }
 
-void silos_record_app_on_event() { AppStarted = true; }
+void silos_record_app_on_event() {
+  configASSERT(CurrentAppIndex < AppCount);
+  AppStarted[CurrentAppIndex] = true;
+}
 
 void silos_serial_write(char value) {
   std::putchar(static_cast<unsigned char>(value));
@@ -107,6 +112,14 @@ void client_task(void *) {
   const bool observed_description = std::strcmp(
       StoreRefWatchObservedDescription,
       "Learn how SilOS loads Lisp from a store") == 0;
+  std::size_t todo_app = SilosInvalidAppIndex;
+  std::size_t status_app = SilosInvalidAppIndex;
+  std::size_t mounted_template_count = 0;
+  for (std::size_t index = 0; index < AppCount; ++index) {
+    if (std::strcmp(AppDeclarations[index].name, "To-do") == 0) todo_app = index;
+    if (std::strcmp(AppDeclarations[index].name, "Status") == 0) status_app = index;
+    mounted_template_count += SilosAppUis[index].mount_count;
+  }
   const bool passed = bind_ready && StoreBindStartedPending &&
                       StoreBindCompletedReady && StoreRefWatchRegistered &&
                       StoreRefWatchOldSnapshotCreated &&
@@ -117,11 +130,20 @@ void client_task(void *) {
                       StoreRefWatchObservedOldValueNil && AppInitialiseDelivered &&
                       AppObservedNoBindBeforeInit && AppObservedStageOne &&
                       AppObservedStageTwo && AppObservedPokeFifo &&
-                      AppEventCount == 3 && AppPokeCount == 2 &&
-                      SilosUiTypeDeclared && SilosUiRefDeclared &&
-                      SilosUiItemTemplateDeclared && SilosUiLiteralDeclared &&
-                      SilosUiListDeclared && SilosUiMounted && UiReadyRendered &&
-                      SilosUiLiteralRendered;
+                      AppEventCount >= 4 && AppPokeCount == 2 &&
+                      AppCount >= 2 && todo_app < AppCount && status_app < AppCount &&
+                      SilosAppUis[todo_app].type_count == 1 &&
+                      SilosAppUis[todo_app].ref_count == 1 &&
+                      SilosAppUis[todo_app].template_count == 3 &&
+                      SilosAppUis[todo_app].mount_count == 2 &&
+                      SilosAppUis[status_app].type_count == 0 &&
+                      SilosAppUis[status_app].ref_count == 0 &&
+                      SilosAppUis[status_app].template_count == 1 &&
+                      SilosAppUis[status_app].mount_count == 1 &&
+                      SilosRenderedAppCount == AppCount &&
+                      SilosRenderedMountCount == mounted_template_count &&
+                      SilosRenderedListRowCount >= 2 &&
+                      SilosRenderedInstructionCount >= 9 && UiReadyRendered;
   std::printf("store-watch fired=%d ready=%s count=%s old=pending/%s\n",
               StoreRefWatchInvocationCount,
               StoreRefWatchObservedReady ? "yes" : "no",

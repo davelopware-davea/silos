@@ -13,9 +13,9 @@ and [Store API](API-BoundQueueStore.md).
 | --- | --- |
 | [`ui-bind`](#ui-bind) | Bind one named uLisp location to a stable UI-facing UiRef. |
 | [`ui-type`](#ui-type) | Declare an immutable fixed-layout record descriptor. |
-| [`ui-template`](#ui-template) | Declare a reusable typed item template. |
+| [`ui-template`](#ui-template) | Declare a reusable flow or typed item template. |
 | [`ui-template-list`](#ui-template-list) | Declare a bounded visible-window list template. |
-| [`ui-field`](#ui-field) | Read a declared item field within a UI template. |
+| [`ui-field`](#ui-field) | Read an item field or supported UiRef property within a UI template. |
 | [`ui-text`](#ui-text) | Stream literal or field text while rendering a UI template. |
 | [`ui-date`](#ui-date) | Stream a formatted date field while rendering a UI template. |
 | [`ui-mount`](#ui-mount) | Make a template or list available for Shell placement. |
@@ -113,6 +113,11 @@ record fields.  A list whose declared item type is `todo-item` therefore may
 render either local `todo-item` arrays or StoreRowRefs whose bound store schema
 is `todo-item`.
 
+In a non-item template, `(ui-field todos-ui count)` projects the live row-count
+property of a `(store-ref (ui-list-of TYPE))` UiRef. The template retains the
+UiRef and reads its current StoreRef metadata on each refresh; it does not copy
+or maintain the count itself.
+
 ## 3. Templates, lists, and mounting
 
 ### `ui-template`
@@ -132,6 +137,15 @@ An item template accepts literal text and its declared item parameter's
 `ui-date` stream output while rendering. `:width` is a character-cell maximum
 and `ui-chop` clips at that maximum; no padded or formatted string is retained.
 
+A template without an item declaration renders once rather than once per list
+row. It may combine literals with supported live UiRef properties:
+
+```lisp
+(ui-template todo-count
+  (ui-text "Count")
+  (ui-text (ui-field todos-ui count) :width 8 :overflow ui-chop))
+```
+
 ### `ui-text`
 
 `ui-text` streams either a string literal or its `ui-field` value as text while
@@ -141,7 +155,8 @@ for every item. Templates do not impose a public instruction-count or literal-
 length cap: declaration allocates exactly the descriptor count and string bytes
 required by the form.
 A field form accepts the bounded text options defined by the template grammar,
-including `:width` and `:overflow ui-chop` in this increment.
+including `:width` and `:overflow ui-chop` in this increment. The supported
+non-item projection currently formats the integer StoreRef `count` property.
 
 ### `ui-date`
 

@@ -218,12 +218,11 @@ requirements, and references to already-registered templates or activation
 functions. Capabilities, permissions, background services, and independent
 processes are later concerns, not requirements to launch the to-do app.
 
-Whether the prototype runs one active uLisp application, several loaded apps
-in one uLisp workspace, or a Lisp-written Shell plus app modules is still an
-experiment. A single active app is the lowest-risk first step. On a tiny screen
-the existing Shell UI design already shows exactly one app at a time; that UI
-fact does not require unloading other applications, but it makes a
-single-active-app experiment sensible.
+The promoted runtime keeps a bounded set of applications loaded in one uLisp
+workspace. Each has its own descriptor, event handler, Store binding, UI
+resources, and generation-tagged event routing. The Shell may render several
+apps on a larger surface while tiny mode selects one of those already-loaded
+apps; visibility does not determine whether the app remains loaded.
 
 ## App declarations and callbacks
 
@@ -326,8 +325,8 @@ inside that one uLisp task.
 The first rule should therefore be that app handlers are short and bounded.
 An app that runs a long `(loop ...)`, performs a blocking wait, or evaluates a
 large unbroken computation prevents every other app in that uLisp task from
-handling events. The initial prototype can avoid this entirely by running one
-active app. If later apps must make long-running work coexist, SilOS will need
+handling events. The current multi-app runtime relies on that short-handler
+rule. If apps must perform long-running work concurrently, SilOS will need
 one of these deliberately larger mechanisms:
 
 - resumable uLisp continuations/fibres and a per-app scheduler;

@@ -31,6 +31,8 @@ void silos_storage_task(void *) {
     configASSERT(xQueueReceive(StorageRequestQueue, &request, portMAX_DELAY) == pdPASS);
     StorageCompletion completion{};
     completion.kind = request.kind;
+    completion.app_index = request.app_index;
+    completion.app_generation = request.app_generation;
     std::snprintf(completion.store_name, sizeof(completion.store_name), "%s",
                   request.store_name);
     configASSERT(xQueueSend(StorageCompletionQueue, &completion, portMAX_DELAY) == pdPASS);
@@ -43,6 +45,7 @@ void silos_shell_task(void *) {
     configASSERT(xQueueReceive(ShellRequestQueue, &request, portMAX_DELAY) == pdPASS);
     ShellEvent event{};
     event.kind = ShellEventKind::Poke;
+    event.app_index = request.app_index;
     event.app_generation = request.app_generation;
     event.payload = request.payload;
     configASSERT(xQueueSend(ShellEventQueue, &event, portMAX_DELAY) == pdPASS);

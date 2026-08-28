@@ -30,11 +30,13 @@ enum class ShellEventKind { AppInitialise, Poke };
 
 struct ShellEvent {
   ShellEventKind kind = ShellEventKind::AppInitialise;
+  std::size_t app_index = 0;
   std::uint32_t app_generation = 0;
   SerializedPayload payload{};
 };
 
 struct ShellRequest {
+  std::size_t app_index = 0;
   std::uint32_t app_generation = 0;
   SerializedPayload payload{};
 };

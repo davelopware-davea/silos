@@ -10,16 +10,27 @@ const char doc_storerowrevision[] = "(store-row-revision store-row-ref)\nReads a
 const char doc_storerowstatus[] = "(store-row-status store-row-ref)\nReads a StoreRowRef status.";
 const char doc_storerowerror[] = "(store-row-error store-row-ref)\nReads a StoreRowRef error.";
 const char doc_storerowfield[] = "(store-row-field store-row-ref field)\nReads an application field from a ready StoreRowRef.";
-object *SilosBoundStoreRef = NULL;
-object *SilosBoundStoreWatch = NULL;
-char SilosBoundStoreName[StoreNameCapacity]{};
-char SilosBoundFieldNames[InMemoryFieldsPerRowCapacity][InMemoryFieldNameCapacity]{};
-std::size_t SilosBoundFieldCount = 0;
-std::size_t SilosBoundStart = 0;
-std::size_t SilosBoundCount = 0;
+struct SilosAppStoreBinding {
+  object *ref = nil;
+  object *watch = nil;
+  char name[StoreNameCapacity]{};
+  char field_names[InMemoryFieldsPerRowCapacity][InMemoryFieldNameCapacity]{};
+  std::size_t field_count = 0;
+  std::size_t start = 0;
+  std::size_t count = 0;
+};
+SilosAppStoreBinding SilosAppStoreBindings[SilosAppCapacity]{};
+
+SilosAppStoreBinding &silos_current_store_binding() {
+  if (CurrentAppIndex >= AppCount) error2("no current app");
+  return SilosAppStoreBindings[CurrentAppIndex];
+}
 object *silos_make_pending_bind_ref () {
   object *metadata = nil;
   metadata = silos_prepend_field("error", nil, metadata);
+  protect(metadata);
+  metadata = silos_prepend_field("count", number(0), metadata);
+  unprotect();
   protect(metadata);
   object *pending = silos_symbol("pending");
   metadata = silos_prepend_field("status", pending, metadata);
@@ -49,12 +60,17 @@ object *silos_snapshot_store_ref (object *live_ref) {
   object *operation_entry = silos_find_field(cdr(metadata_entry), "operation");
   object *status_entry = silos_find_field(cdr(metadata_entry), "status");
   object *error_entry = silos_find_field(cdr(metadata_entry), "error");
-  if (operation_entry == nil || status_entry == nil || error_entry == nil) {
+  object *count_entry = silos_find_field(cdr(metadata_entry), "count");
+  if (operation_entry == nil || status_entry == nil || error_entry == nil ||
+      count_entry == nil) {
     error2("invalid StoreRef metadata");
   }
 
   object *metadata = nil;
   metadata = silos_prepend_field("error", cdr(error_entry), metadata);
+  protect(metadata);
+  metadata = silos_prepend_field("count", cdr(count_entry), metadata);
+  unprotect();
   protect(metadata);
   metadata = silos_prepend_field("status", cdr(status_entry), metadata);
   unprotect();
@@ -143,6 +159,7 @@ object *silos_store_ref_metadata(object *ref) {
   object *metadata = silos_find_field(ref, "meta");
   if (metadata == nil || silos_find_field(cdr(metadata), "operation") == nil ||
       silos_find_field(cdr(metadata), "status") == nil ||
+      silos_find_field(cdr(metadata), "count") == nil ||
       silos_find_field(cdr(metadata), "error") == nil ||
       silos_find_field(ref, "value") == nil) error2("invalid StoreRef");
   return cdr(metadata);
@@ -161,6 +178,12 @@ object *silos_store_row_metadata(object *row) {
 object *silos_store_ref_status(object *ref) {
   object *status = silos_find_field(silos_store_ref_metadata(ref), "status");
   return cdr(status);
+}
+
+object *silos_store_ref_count(object *ref) {
+  object *count = silos_find_field(silos_store_ref_metadata(ref), "count");
+  if (!integerp(cdr(count))) error2("invalid StoreRef count");
+  return cdr(count);
 }
 
 object *silos_store_row_status(object *row) {
@@ -201,7 +224,8 @@ object *fn_storevalue (object *args, object *env) {
 
 object *fn_storerowcount (object *args, object *env) {
   (void) env;
-  return number(listlength(silos_store_bound_rows(first(args))));
+  (void)silos_store_bound_rows(first(args));
+  return silos_store_ref_count(first(args));
 }
 
 object *fn_storerowat (object *args, object *env) {
@@ -261,6 +285,7 @@ object *fn_storerowfield (object *args, object *env) {
 
 object *fn_storebind (object *args, object *env) {
   (void) env;
+  SilosAppStoreBinding &binding = silos_current_store_binding();
   char name[StoreNameCapacity];
   cstring(checkstring(first(args)), name, sizeof(name));
   object *fields = second(args);
@@ -269,69 +294,79 @@ object *fn_storebind (object *args, object *env) {
   if (SourceStores.get(name) == nullptr || start < 0 || count <= 0) {
     error2("unsupported store-bind request");
   }
-  SilosBoundFieldCount = 0;
+  binding.field_count = 0;
   while (fields != nil) {
-    if (!consp(fields) || SilosBoundFieldCount == InMemoryFieldsPerRowCapacity ||
+    if (!consp(fields) || binding.field_count == InMemoryFieldsPerRowCapacity ||
         !silos_copy_symbol_name(first(fields),
-                                SilosBoundFieldNames[SilosBoundFieldCount],
+                                binding.field_names[binding.field_count],
                                 InMemoryFieldNameCapacity)) {
       error2("unsupported store-bind fields");
     }
-    ++SilosBoundFieldCount;
+    ++binding.field_count;
     fields = rest(fields);
   }
-  if (SilosBoundStoreRef != nil) error2("a store is already bound");
+  if (binding.ref != nil) error2("a store is already bound by this app");
 
-  SilosBoundStoreRef = silos_make_pending_bind_ref();
-  std::snprintf(SilosBoundStoreName, sizeof(SilosBoundStoreName), "%s", name);
-  SilosBoundStart = static_cast<std::size_t>(start);
-  SilosBoundCount = static_cast<std::size_t>(count);
+  binding.ref = silos_make_pending_bind_ref();
+  std::snprintf(binding.name, sizeof(binding.name), "%s", name);
+  binding.start = static_cast<std::size_t>(start);
+  binding.count = static_cast<std::size_t>(count);
   StoreBindStartedPending = true;
   StorageRequest request{};
   request.kind = StorageRequestKind::BindStore;
+  request.app_index = CurrentAppIndex;
+  request.app_generation = AppGenerations[CurrentAppIndex];
   std::snprintf(request.store_name, sizeof(request.store_name), "%s", name);
   if (xQueueSend(StorageRequestQueue, &request, 0) != pdPASS) {
     error2("storage request queue is full");
   }
   std::printf("store-bind=%s status=pending\n", name);
-  return SilosBoundStoreRef;
+  return binding.ref;
 }
 
 object *fn_storewatch (object *args, object *env) {
   (void) env;
-  if (first(args) != SilosBoundStoreRef) error2("unknown StoreRef");
-  if (SilosBoundStoreWatch != NULL) error2("StoreRef already has a watch");
-  // The callback remains rooted until the future app-stop/reload lifecycle
-  // releases it. This one-watch lifetime is deliberately the current limit.
-  SilosBoundStoreWatch = second(args);
+  SilosAppStoreBinding &binding = silos_current_store_binding();
+  if (first(args) != binding.ref) error2("unknown StoreRef");
+  if (binding.watch != nil) error2("StoreRef already has a watch");
+  binding.watch = second(args);
   StoreRefWatchRegistered = true;
   return tee;
 }
 
 void silos_ulisp_complete_store_bind(const StorageCompletion &completion) {
+  if (completion.app_index >= AppCount ||
+      completion.app_generation != AppGenerations[completion.app_index]) return;
+  SilosAppStoreBinding &binding = SilosAppStoreBindings[completion.app_index];
   const InMemoryStore *store = SourceStores.get(completion.store_name);
   configASSERT(store != nullptr);
-  configASSERT(SilosBoundStoreRef != nil);
-  configASSERT(std::strcmp(completion.store_name, SilosBoundStoreName) == 0);
-  object *value = silos_find_field(SilosBoundStoreRef, "value");
-  object *metadata = silos_find_field(SilosBoundStoreRef, "meta");
+  configASSERT(binding.ref != nil);
+  configASSERT(std::strcmp(completion.store_name, binding.name) == 0);
+  object *value = silos_find_field(binding.ref, "value");
+  object *metadata = silos_find_field(binding.ref, "meta");
   configASSERT(value != nil);
   configASSERT(metadata != nil);
   object *status = silos_find_field(cdr(metadata), "status");
+  object *count = silos_find_field(cdr(metadata), "count");
   configASSERT(status != nil);
-  object *old_snapshot = silos_snapshot_store_ref(SilosBoundStoreRef);
+  configASSERT(count != nil);
+  object *old_snapshot = silos_snapshot_store_ref(binding.ref);
   protect(old_snapshot);
   StoreRefWatchOldSnapshotCreated = true;
   object *old_value = silos_find_field(old_snapshot, "value");
   configASSERT(old_value != nil);
   StoreRefWatchObservedOldValueNil = cdr(old_value) == nil;
-  cdr(value) = silos_make_store_row_refs(*store, SilosBoundFieldNames,
-                                        SilosBoundFieldCount, SilosBoundStart,
-                                        SilosBoundCount);
+  cdr(value) = silos_make_store_row_refs(*store, binding.field_names,
+                                        binding.field_count, binding.start,
+                                        binding.count);
+  cdr(count) = number(listlength(cdr(value)));
   cdr(status) = silos_symbol("ready");
-  configASSERT(SilosBoundStoreWatch != NULL);
-  object *watch_arguments = cons(SilosBoundStoreRef, cons(old_snapshot, nil));
-  (void)apply(SilosBoundStoreWatch, watch_arguments, nullptr);
+  configASSERT(binding.watch != nil);
+  object *watch_arguments = cons(binding.ref, cons(old_snapshot, nil));
+  const std::size_t previous_app = CurrentAppIndex;
+  CurrentAppIndex = completion.app_index;
+  (void)apply(binding.watch, watch_arguments, nullptr);
+  CurrentAppIndex = previous_app;
   ++StoreRefWatchInvocationCount;
   unprotect();
   StoreBindCompletedReady = true;

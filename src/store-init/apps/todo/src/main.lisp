@@ -4,18 +4,20 @@
 
 ; The outer bindings are this app instance's private state. The registered
 ; event-handler closure retains them between later event turns.
-(let ((todo-row
+(let ((todo-row-ui-temp
         ; Each field directive names a typed row field and its bounded
         ; character width. The Shell owns this immutable description, never a
         ; current row value.
-        (ui-template todo-row (item todo-item)
+        (ui-template todo-row-ui-temp (item todo-item)
           (ui-text "TODO:")
           (ui-text (ui-field item desc) :width 32 :overflow ui-chop)
           (ui-text (ui-field item status) :width 16 :overflow ui-chop)))
-      (todo-items nil)
+      (todo-items-store nil)
       (todo-items-ui nil)
-      (todo-list nil)
-      (todo-list-mount nil))
+      (todo-list-ui-ltemp nil)
+      (todo-list-ui-mount nil)
+      (todo-count-ui-temp nil)
+      (todo-count-ui-mount nil))
   ; SHELL-APP-ON-EVENT is intentionally the final action during source
   ; evaluation. The Shell sends SHELL-APP-INITIALISE later, after this closure
   ; has been registered.
@@ -32,10 +34,10 @@
             (progn
               ; Stage one is the first permitted Store bind. The critical
               ; StoreRef watch is attached before requesting another turn.
-              (setq todo-items
+              (setq todo-items-store
                     (store-bind "todo/items.csv" '(desc status) 0 5))
               (store-watch
-                todo-items
+                todo-items-store
                 (lambda (live old-value)
                   ; Store changes belong to this watch, never to the app event
                   ; handler. The test sink merely proves pending -> ready
@@ -45,18 +47,18 @@
                     (store-row-count live)
                     (store-row-field (store-row-at live 0) 'desc)
                     (store-status old-value))))
-              ; UI-BIND retains the TODO-ITEMS lexical location and returns its
-              ; stable UiRef handle.
+              ; UI-BIND retains the TODO-ITEMS-STORE lexical location and
+              ; returns its stable UI handle.
               (setq todo-items-ui
-                    (ui-bind todo-items (store-ref (ui-list-of todo-item))))
+                    (ui-bind todo-items-store (store-ref (ui-list-of todo-item))))
               (silos-test-app-stage 1)
               (shell-request-poke 'init 2)))
            (2
             (progn
-              (setq todo-list
-                    (ui-template-list todo-list
+              (setq todo-list-ui-ltemp
+                    (ui-template-list todo-list-ui-ltemp
                       :source todo-items-ui
-                      :item-template todo-row
+                      :item-template todo-row-ui-temp
                       :offset 0
                       :limit 5
                       :pending "Loading to-dos..."
@@ -64,6 +66,13 @@
                       :error "To-dos unavailable."))
               ; The Shell chooses placement. UI code never chooses a coordinate,
               ; font, pixel buffer, or an app render loop.
-              (setq todo-list-mount
-                    (ui-mount todo-list))
+              (setq todo-list-ui-mount
+                    (ui-mount todo-list-ui-ltemp))
+              (setq todo-count-ui-temp
+                    (ui-template todo-count-ui-temp
+                      (ui-text "Count")
+                      (ui-text (ui-field todo-items-ui count)
+                        :width 8 :overflow ui-chop)))
+              (setq todo-count-ui-mount
+                    (ui-mount todo-count-ui-temp))
               (silos-test-app-stage 2)))))))))

@@ -1,7 +1,7 @@
 const char doc_shelleventtype[] = "(shell-event-type event)";
 const char doc_shellrequestpoke[] = "(shell-request-poke type arg...)";
-object *SilosActiveHandler = NULL;
-bool SilosPokePending = false;
+object *SilosActiveHandlers[SilosAppCapacity]{};
+bool SilosPokePending[SilosAppCapacity]{};
 // Copy one admissible Lisp value into a bounded flat native arena. The queue
 // therefore owns data, not a uLisp pointer which could be reclaimed or mutate
 // before the Shell's later delivery turn.
@@ -68,12 +68,14 @@ object *silos_deserialise_value(const SerializedPayload &payload, std::uint8_t i
 
 object *fn_shellapponevent (object *args, object *env) {
   (void) env;
-  if (SilosActiveHandler != NULL) error2("app already started");
-  SilosActiveHandler = first(args);
+  if (CurrentAppIndex >= AppCount) error2("no current app");
+  if (SilosActiveHandlers[CurrentAppIndex] != nil) error2("app already started");
+  SilosActiveHandlers[CurrentAppIndex] = first(args);
   silos_record_app_on_event();
   ShellEvent initialise{};
   initialise.kind = ShellEventKind::AppInitialise;
-  initialise.app_generation = ActiveAppGeneration;
+  initialise.app_index = CurrentAppIndex;
+  initialise.app_generation = AppGenerations[CurrentAppIndex];
   if (xQueueSend(ShellEventQueue, &initialise, 0) != pdPASS) error2("shell event queue is full");
   return tee;
 }
@@ -92,14 +94,17 @@ object *fn_shelleventtype (object *args, object *env) {
 
 object *fn_shellrequestpoke (object *args, object *env) {
   (void) env;
-  if (SilosActiveHandler == NULL) error2("app is not started");
+  if (CurrentAppIndex >= AppCount || SilosActiveHandlers[CurrentAppIndex] == nil) {
+    error2("app is not started");
+  }
   if (!symbolp(first(args))) error2("event type is not a symbol");
-  if (SilosPokePending) error2("poke-pending");
+  if (SilosPokePending[CurrentAppIndex]) error2("poke-pending");
   ShellRequest request{};
-  request.app_generation = ActiveAppGeneration;
+  request.app_index = CurrentAppIndex;
+  request.app_generation = AppGenerations[CurrentAppIndex];
   if (!silos_serialise_value(args, request.payload, 0, request.payload.root)) error2("unsupported poke payload");
   if (xQueueSend(ShellRequestQueue, &request, 0) != pdPASS) error2("shell request queue is full");
-  SilosPokePending = true;
+  SilosPokePending[CurrentAppIndex] = true;
   return tee;
 }
 
@@ -107,52 +112,49 @@ object *fn_shellrequestpoke (object *args, object *env) {
 // proper list whose first item is its type; app-owned types such as `init` and
 // their parameters are interpreted exclusively by the Lisp handler.
 void silos_ulisp_dispatch_shell_event(const ShellEvent &event) {
-  if (event.app_generation != ActiveAppGeneration || SilosActiveHandler == NULL) return;
+  if (event.app_index >= AppCount ||
+      event.app_generation != AppGenerations[event.app_index] ||
+      SilosActiveHandlers[event.app_index] == nil) return;
+  const std::size_t previous_app = CurrentAppIndex;
+  CurrentAppIndex = event.app_index;
   object *event_value = nil;
   if (event.kind == ShellEventKind::AppInitialise) {
     AppInitialiseDelivered = true;
-    AppObservedNoBindBeforeInit = SilosBoundStoreRef == nil;
+    AppObservedNoBindBeforeInit =
+        SilosAppStoreBindings[CurrentAppIndex].ref == nil;
     object *type = silos_symbol("shell-app-initialise");
     protect(type);
     event_value = cons(type, nil);
     unprotect();
   } else {
-    SilosPokePending = false;
+    SilosPokePending[CurrentAppIndex] = false;
     ++AppPokeCount;
     event_value = silos_deserialise_value(event.payload, event.payload.root);
   }
   protect(event_value);
   object *arguments = cons(event_value, nil);
   protect(arguments);
-  (void)apply(SilosActiveHandler, arguments, nullptr);
+  (void)apply(SilosActiveHandlers[CurrentAppIndex], arguments, nullptr);
   ++AppEventCount;
   unprotect();
   unprotect();
+  CurrentAppIndex = previous_app;
 }
 
-// Cleanup is intentionally explicit even though this one-app proof does not
-// expose a Reload button yet. It prevents old roots or a queued poke from
-// leaking into the next app generation when bootstrap/reload is added.
-void silos_cleanup_active_app() {
-  silos_release_ui_instructions(SilosUiInstructions, SilosUiInstructionCount);
-  SilosUiInstructions = nullptr;
-  SilosUiInstructionCount = 0;
-  SilosActiveHandler = nil;
-  SilosBoundStoreRef = nil;
-  SilosBoundStoreWatch = nil;
-  SilosUiSourceBinding = nil;
-  SilosPokePending = false;
-  SilosUiMounted = false;
-  SilosUiTypeFieldCount = 0;
-  SilosUiTypeDeclared = false;
-  SilosUiRefDeclared = false;
-  SilosUiItemTemplateDeclared = false;
-  SilosUiListDeclared = false;
-  SilosUiLiteralDeclared = false;
-  SilosUiLiteralRendered = false;
-  SilosUiRefHandle = 0;
-  SilosUiTemplateHandle = 0;
-  SilosUiListHandle = 0;
+// Cleanup is explicit so roots and queued events cannot leak across a complete
+// catalogue bootstrap. Per-app reload remains a later lifecycle operation.
+void silos_cleanup_apps() {
+  for (std::size_t index = 0; index < AppCount; ++index) {
+    silos_cleanup_app_ui(index);
+    SilosActiveHandlers[index] = nil;
+    SilosAppStoreBindings[index] = SilosAppStoreBinding{};
+    SilosPokePending[index] = false;
+    AppDeclarations[index] = AppDeclaration{};
+    AppStarted[index] = false;
+    AppGenerations[index] = 0;
+  }
+  AppCount = 0;
+  CurrentAppIndex = SilosInvalidAppIndex;
   xQueueReset(ShellRequestQueue);
   xQueueReset(ShellEventQueue);
 }

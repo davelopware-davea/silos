@@ -21,19 +21,28 @@ bool is_app_manifest_name(const char *name) {
 bool silos_bootstrap_apps(InMemoryStoreBackend &stores) {
   bool found_manifest = false;
   bool loaded = true;
+  silos_cleanup_apps();
   stores.visit([&](const InMemoryStore &store) {
     if (!is_app_manifest_name(store.name())) return;
     found_manifest = true;
-    silos_cleanup_active_app();
-    ++ActiveAppGeneration;
-    CurrentDeclaration = AppDeclaration{};
-    AppStarted = false;
-    loaded = silos_ulisp_evaluate(store) && CurrentDeclaration.present && loaded;
-    const InMemoryStore *entry = stores.get(CurrentDeclaration.entry);
-    loaded = entry != nullptr && silos_ulisp_evaluate(*entry) && AppStarted && loaded;
+    if (AppCount == SilosAppCapacity) {
+      loaded = false;
+      return;
+    }
+    CurrentAppIndex = AppCount++;
+    AppDeclarations[CurrentAppIndex] = AppDeclaration{};
+    AppStarted[CurrentAppIndex] = false;
+    AppGenerations[CurrentAppIndex] = ++NextAppGeneration;
+    loaded = silos_ulisp_evaluate(store) &&
+             AppDeclarations[CurrentAppIndex].present && loaded;
+    const InMemoryStore *entry = stores.get(AppDeclarations[CurrentAppIndex].entry);
+    loaded = entry != nullptr && silos_ulisp_evaluate(*entry) &&
+             AppStarted[CurrentAppIndex] && loaded;
     std::printf("manifest=%s app=%s entry=%s started=%s\n", store.name(),
-                CurrentDeclaration.name, CurrentDeclaration.entry,
-                AppStarted ? "yes" : "no");
+                AppDeclarations[CurrentAppIndex].name,
+                AppDeclarations[CurrentAppIndex].entry,
+                AppStarted[CurrentAppIndex] ? "yes" : "no");
   });
+  CurrentAppIndex = SilosInvalidAppIndex;
   return found_manifest && loaded;
 }

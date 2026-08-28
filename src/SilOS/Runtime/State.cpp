@@ -1,9 +1,12 @@
 #include "SilOS/Runtime/State.h"
 
 InMemoryStoreBackend SourceStores;
-AppDeclaration CurrentDeclaration;
-bool AppStarted = false;
-std::uint32_t ActiveAppGeneration = 0;
+AppDeclaration AppDeclarations[SilosAppCapacity]{};
+bool AppStarted[SilosAppCapacity]{};
+std::uint32_t AppGenerations[SilosAppCapacity]{};
+std::size_t AppCount = 0;
+std::size_t CurrentAppIndex = SilosInvalidAppIndex;
+std::uint32_t NextAppGeneration = 0;
 bool AppInitialiseDelivered = false;
 int AppEventCount = 0;
 int AppPokeCount = 0;
