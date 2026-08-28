@@ -122,13 +122,18 @@ is the documented storage callback: it receives `(live old-value)` only after
 the live StoreRef has changed. `shell-app-on-event` separately retains an
 app-level handler. It receives `(shell-app-initialise)` later and uses
 `shell-request-poke` to request two generic `(init stage)` events that choose
-when to bind storage and when to mount the list. The Shell never interprets
-that app-owned event type or stage data. Only one StoreRef watch per app is
-supported now, and each callback is rooted until the future app-stop/reload lifecycle
-releases it. There is no watch removal operation in this increment.
+when to acquire Store and UI resources. Each shallow stage case calls a lexical
+stage function defined in the entry's top-level `let`; source loading itself
+only creates private state and registers the event handler. The Shell never
+interprets that app-owned event type or stage data. Only one StoreRef watch per
+app is supported now, and each callback is rooted until the future app-stop/
+reload lifecycle releases it. There is no watch removal operation in this
+increment.
 
 The entry's template and live handles are private lexical bindings captured by
-the app event-handler closure. `ui-bind` resolves and roots the `todo-items`
+the app event-handler closure. Store bindings use the `-store` suffix, UI
+bindings use `-ui`, and template/list-template/mount handles use `-ui-temp`,
+`-ui-ltemp`, and `-ui-mount`. `ui-bind` resolves and roots the `todo-items-store`
 binding pair itself, so later redraws follow that location without promoting
 the app instance's state to uLisp globals.
 
