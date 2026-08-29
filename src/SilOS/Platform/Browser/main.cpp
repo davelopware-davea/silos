@@ -8,16 +8,20 @@
 #include <cstring>
 #include <iterator>
 #include <new>
+#include <string>
+#include <utility>
 
 #include <emscripten.h>
 
 #include "SilOS/Store/InMemoryStoreBackend.h"
 #include "SilOS/Platform/Browser/BrowserStoreInitLoader.h"
-#include "SilOS/UI/PlatformSurface.h"
+#include "SilOS/UI/IPlatformRenderEngine.h"
 #include "SilOS/UI/Renderer.h"
+#include "SilOS/UI/UIAppBinding.h"
 #include "SilOS/Runtime/State.h"
 #include "SilOS/Runtime/AppBootstrap.h"
 #include "SilOS/Runtime/EventPump.h"
+#include "SilOS/uLisp/RuntimeAdapter.h"
 #include "SilOS/Shell/Events.h"
 #include "SilOS/FreeRTOS/QueueRuntime.h"
 #include "FreeRTOS.h"
@@ -35,18 +39,21 @@ WiFiClass WiFi;
 namespace {
 constexpr configSTACK_DEPTH_TYPE ULispTaskStackBytes = 65536U;
 constexpr configSTACK_DEPTH_TYPE ClientTaskStackBytes = 32768U;
+constexpr configSTACK_DEPTH_TYPE RenderTaskStackBytes = 32768U;
 }
 
 // These functions are called by the SilOS uLisp extension included through
 // the explicit integration seam in the vendored sketch.
-void silos_capture_app_declaration(const char *name, int ideal_width,
-                                   int ideal_height, const char *entry) {
+void silos_capture_app_declaration(sobject *display_name, std::string name,
+                                   int ideal_width, int ideal_height,
+                                   std::string entry) {
   configASSERT(CurrentAppIndex < AppCount);
   AppDeclaration &declaration = AppDeclarations[CurrentAppIndex];
-  std::snprintf(declaration.name, sizeof(declaration.name), "%s", name);
+  declaration.name = std::move(name);
+  declaration.display_name = display_name;
   declaration.ideal_width = ideal_width;
   declaration.ideal_height = ideal_height;
-  std::snprintf(declaration.entry, sizeof(declaration.entry), "%s", entry);
+  declaration.entry = std::move(entry);
   declaration.present = true;
 }
 
@@ -54,6 +61,9 @@ void silos_record_app_on_event() {
   configASSERT(CurrentAppIndex < AppCount);
   AppStarted[CurrentAppIndex] = true;
 }
+
+void silos_before_load_image() { silos_cleanup_apps(); }
+bool silos_after_load_image() { return silos_bootstrap_apps(SourceStores); }
 
 void silos_serial_write(char value) {
   std::putchar(static_cast<unsigned char>(value));
@@ -89,11 +99,15 @@ void configTime(long, int, const char *) {}
 
 namespace {
 void ulisp_task(void *) {
+  silos_lock_ulisp_workspace();
   setup();
   const bool booted = silos_bootstrap_apps(SourceStores);
+  silos_unlock_ulisp_workspace();
   configASSERT(booted);
   for (;;) {
+    silos_lock_ulisp_workspace();
     silos_process_runtime_events();
+    silos_unlock_ulisp_workspace();
     // One whole tick gives the cooperative Browser scheduler a yield point.
     // pdMS_TO_TICKS(1) rounds down to zero at this target's 100 Hz tick rate.
     vTaskDelay(1);
@@ -109,16 +123,23 @@ void client_task(void *) {
   // but before the next Shell turn. Give that independently queued stage a
   // bounded chance to run before this test-only client decides the proof.
   for (int ticks = 0; ticks < 20 && !AppObservedStageTwo; ++ticks) vTaskDelay(1);
+  // Rendering has its own cadence and intentionally samples app state rather
+  // than rendering synchronously from a declaration or Store completion.
+  for (int ticks = 0;
+       ticks < 20 && (!UiReadyRendered || SilosRenderedAppCount != AppCount);
+       ++ticks) {
+    vTaskDelay(1);
+  }
   const bool observed_description = std::strcmp(
-      StoreRefWatchObservedDescription,
+      StoreRefWatchObservedDescription.c_str(),
       "Learn how SilOS loads Lisp from a store") == 0;
   std::size_t todo_app = SilosInvalidAppIndex;
   std::size_t status_app = SilosInvalidAppIndex;
   std::size_t mounted_template_count = 0;
   for (std::size_t index = 0; index < AppCount; ++index) {
-    if (std::strcmp(AppDeclarations[index].name, "To-do") == 0) todo_app = index;
-    if (std::strcmp(AppDeclarations[index].name, "Status") == 0) status_app = index;
-    mounted_template_count += SilosAppUis[index].mount_count;
+    if (AppDeclarations[index].name == "To-do") todo_app = index;
+    if (AppDeclarations[index].name == "Status") status_app = index;
+    mounted_template_count += silos_ui_binding(index).mountCount();
   }
   const bool passed = bind_ready && StoreBindStartedPending &&
                       StoreBindCompletedReady && StoreRefWatchRegistered &&
@@ -132,14 +153,14 @@ void client_task(void *) {
                       AppObservedStageTwo && AppObservedPokeFifo &&
                       AppEventCount >= 4 && AppPokeCount == 2 &&
                       AppCount >= 2 && todo_app < AppCount && status_app < AppCount &&
-                      SilosAppUis[todo_app].type_count == 1 &&
-                      SilosAppUis[todo_app].ref_count == 1 &&
-                      SilosAppUis[todo_app].template_count == 3 &&
-                      SilosAppUis[todo_app].mount_count == 2 &&
-                      SilosAppUis[status_app].type_count == 0 &&
-                      SilosAppUis[status_app].ref_count == 0 &&
-                      SilosAppUis[status_app].template_count == 1 &&
-                      SilosAppUis[status_app].mount_count == 1 &&
+                      silos_ui_binding(todo_app).typeCount() == 1 &&
+                      silos_ui_binding(todo_app).refCount() == 1 &&
+                      silos_ui_binding(todo_app).templateCount() == 3 &&
+                      silos_ui_binding(todo_app).mountCount() == 2 &&
+                      silos_ui_binding(status_app).typeCount() == 0 &&
+                      silos_ui_binding(status_app).refCount() == 0 &&
+                      silos_ui_binding(status_app).templateCount() == 1 &&
+                      silos_ui_binding(status_app).mountCount() == 1 &&
                       SilosRenderedAppCount == AppCount &&
                       SilosRenderedMountCount == mounted_template_count &&
                       SilosRenderedListRowCount >= 2 &&
@@ -183,6 +204,7 @@ int main() {
   configASSERT(xTaskCreate(ulisp_task, "ulisp", ULispTaskStackBytes, nullptr, 2, nullptr) == pdPASS);
   configASSERT(xTaskCreate(silos_storage_task, "store", ULispTaskStackBytes, nullptr, 2, nullptr) == pdPASS);
   configASSERT(xTaskCreate(silos_shell_task, "shell", ULispTaskStackBytes, nullptr, 2, nullptr) == pdPASS);
+  configASSERT(xTaskCreate(silos_ui_render_task, "ui-render", RenderTaskStackBytes, nullptr, 2, nullptr) == pdPASS);
   configASSERT(xTaskCreate(client_task, "client", ClientTaskStackBytes, nullptr, 2, nullptr) == pdPASS);
   vTaskStartScheduler();
   return 0;

@@ -12,7 +12,9 @@ Project-level code ownership and platform boundaries are recorded in the
 [SilOS code-layout discussion](Discussion-Code-Layout.md). Supporting design
 material is kept separate: [UiRefs and templates](Discussion-VariableBindingAndTemplates.md),
 [Shell UI](Discussion-Shell-UI.md), and
-[storage and MQTT references](Discussion-QueueMetaphors.md). The completed
+[storage and MQTT references](Discussion-QueueMetaphors.md). The implemented
+[zero-copy UI refactor](RefactorPlan-UI-Rendering-Pipeline.md) records its
+supporting implementation plan. The completed
 [FreeWisp plan](../../experiments/freertos-ulisp-browser/plan.md) supplies
 Browser-substrate evidence.
 
@@ -88,11 +90,17 @@ promoted to [`src/`](../../src/). The following general approach is locked:
 - one uLisp-owning task evaluates Lisp and owns its workspace, garbage collection, live references, and callbacks;
 - FreeRTOS queues carry bounded pointer-free messages between task owners;
 - uLisp applications are discovered and loaded from named stores through Shell-managed manifests and lifecycle events;
-- the runtime keeps a bounded set of applications loaded together, with per-app handlers, Store bindings, UiRefs, types, templates, mounts, and generation-tagged event routing;
-- a full UI refresh traverses visible apps and each app's mounted templates; list templates traverse their bounded row window and apply an item template, while non-list templates render once;
+- the runtime sizes its application catalogue from discovered manifests, with
+  app and UI-resource counts limited by available memory rather than global
+  compile-time capacities;
+- a dedicated UI task samples each app at a platform-configured cadence, locks
+  the shared uLisp workspace for one app at a time, and streams canonical uLisp
+  declarations and values to a platform-owned renderer;
 - Lisp source stores preserve one editable source line per stable-ID Store row. The initial implementation uses dynamically sized linked rows and string values so line count and length are limited by available memory rather than arbitrary per-store constants; that backing remains hidden behind the Store interface for later replacement with measured, target-appropriate block allocation;
 - StoreRefs and UiRefs provide stable language-visible live references, while reusable flow templates describe presentation without a conventional application-owned UI tree;
-- portable Store, UI, Shell, and Runtime behaviour is separated from the uLisp and FreeRTOS adapters and from `Platform/<Target>` implementations; and
+- platform drawing is separated from Store, UI, Shell, and Runtime policy;
+  portable UI deliberately uses allocation-free uLisp navigation helpers
+  because uLisp objects are its canonical in-memory representation; and
 - the Browser target uses Emscripten WebAssembly, cooperative fibers, preloaded startup stores, and a narrow Browser surface adapter.
 
 Public operations, record representations, capacities, rendering strategy, and

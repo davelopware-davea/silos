@@ -5,17 +5,21 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
+#include <string>
+#include <vector>
 
-constexpr std::size_t StoreNameCapacity = InMemoryStoreNameCapacity;
-constexpr std::size_t StoreRefWatchObservedDescriptionCapacity = 256;
-constexpr std::size_t SilosAppCapacity = 4;
-constexpr std::size_t SilosInvalidAppIndex = SilosAppCapacity;
+struct sobject;
+
+constexpr std::size_t SilosInvalidAppIndex =
+    std::numeric_limits<std::size_t>::max();
 
 struct AppDeclaration {
-  char name[32]{};
+  std::string name;
+  sobject *display_name = nullptr;
   int ideal_width = 0;
   int ideal_height = 0;
-  char entry[StoreNameCapacity]{};
+  std::string entry;
   bool present = false;
 };
 
@@ -24,19 +28,17 @@ struct StorageRequest {
   StorageRequestKind kind = StorageRequestKind::BindStore;
   std::size_t app_index = 0;
   std::uint32_t app_generation = 0;
-  char store_name[StoreNameCapacity]{};
 };
 struct StorageCompletion {
   StorageRequestKind kind = StorageRequestKind::BindStore;
   std::size_t app_index = 0;
   std::uint32_t app_generation = 0;
-  char store_name[StoreNameCapacity]{};
 };
 
 extern InMemoryStoreBackend SourceStores;
-extern AppDeclaration AppDeclarations[SilosAppCapacity];
-extern bool AppStarted[SilosAppCapacity];
-extern std::uint32_t AppGenerations[SilosAppCapacity];
+extern std::vector<AppDeclaration> AppDeclarations;
+extern std::vector<bool> AppStarted;
+extern std::vector<std::uint32_t> AppGenerations;
 extern std::size_t AppCount;
 extern std::size_t CurrentAppIndex;
 extern std::uint32_t NextAppGeneration;
@@ -59,4 +61,4 @@ extern bool StoreRefWatchObservedReady;
 extern bool StoreRefWatchObservedCount;
 extern bool StoreRefWatchObservedOldPending;
 extern bool StoreRefWatchObservedOldValueNil;
-extern char StoreRefWatchObservedDescription[StoreRefWatchObservedDescriptionCapacity];
+extern std::string StoreRefWatchObservedDescription;

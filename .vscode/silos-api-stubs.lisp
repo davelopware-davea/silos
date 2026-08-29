@@ -7,7 +7,7 @@
 ;;;
 ;;; Keep these lambda lists aligned with docs/design/API-*.md while those
 ;;; documents remain the authoritative descriptions of the proposed APIs.
-;;; API docs SHA-256: e50a7b8b86fb44a405f7907533d198f12a363454b329d9e335e2e64c415d5259
+;;; API docs SHA-256: d934c85c2f57559445bb4c46d64461bb4dfd424de70441bd2c40657aca0c6400
 
 (in-package #:cl-user)
 

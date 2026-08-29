@@ -36,15 +36,21 @@ SilOS/
     `-- <Target>/
 ```
 
-`Store`, `UI`, and `Shell` own the portable SilOS behaviour for those
-capabilities. `Runtime` owns portable composition and lifecycle behaviour
+`Store`, `UI`, and `Shell` own SilOS behaviour for those capabilities.
+`Runtime` owns portable composition and lifecycle behaviour
 which does not naturally belong to one of them.
 
-Directories named for external dependencies contain adapters, not SilOS
-capability policy. `uLisp` translates between
-uLisp objects and operations and the SilOS modules, while `FreeRTOS` maps
-portable scheduling, task, queue, and completion needs onto FreeRTOS. Neither
-adapter owns Store, UI, Shell, or Runtime semantics.
+uLisp supplies the canonical in-memory representation used by applications and
+the UI. Allocation-free navigation helpers localise representation knowledge,
+but borrowed uLisp objects intentionally flow through UI traversal and the
+platform render seam. FreeRTOS maps scheduling, task, queue, mutex, and
+completion needs. Neither dependency owns SilOS policy.
+
+The UI pipeline therefore uses ordinary compiled `.h`/`.cpp` modules under
+`SilOS/UI`. Only the minimal built-in forwarding, root integration, and private
+uLisp object-access implementations remain as fragments under `SilOS/uLisp`.
+An `.inc` file is an integration constraint of the monolithic uLisp translation
+unit, not the home of a SilOS class or UI policy.
 
 ## Platform implementations
 
@@ -63,12 +69,13 @@ architecture.
 ## Module-owned platform interfaces
 
 A portable module defines the narrow capabilities it requires a platform to
-implement. These interfaces live beside the consuming module and use the
-filename convention `Platform<Capability>.h`, so the platform seam stands out
-without creating a broad platform-service abstraction. Examples are:
+implement. These interfaces live beside the consuming module. When a header's
+primary declaration is an interface class, name the file after that class so
+the seam is directly discoverable; capability-only headers may use the
+`Platform<Capability>.h` convention. Examples are:
 
 ```text
-SilOS/UI/PlatformSurface.h
+SilOS/UI/IPlatformRenderEngine.h
 SilOS/Store/PlatformPersistence.h
 SilOS/Shell/PlatformEventTransport.h
 ```
@@ -107,7 +114,7 @@ Platform/Browser/BrowserSurface
              v
        UI/PlatformSurface <--- UI renderer
 
-language adapter ---> Store / UI / Shell / Runtime
+uLisp object model --> UI traversal / platform render seam
 RTOS adapter -------> Store / UI / Shell / Runtime
 ```
 

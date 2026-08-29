@@ -2,14 +2,19 @@
 
 #include <cstddef>
 
-enum class UiRenderState { Pending, Ready, Empty, Error };
+class UIAppBinding;
+class UITemplateEngine;
+struct sobject;
 
-void silos_ui_render_begin();
-void silos_ui_render_app_begin(std::size_t app_index, const char *name);
-void silos_ui_render_template_begin(std::size_t app_index,
-                                    std::size_t mount_index,
-                                    UiRenderState state, const char *message,
-                                    bool is_list);
-void silos_ui_render_text(std::size_t app_index, std::size_t mount_index,
-                          int row_index, const char *field_name,
-                          const char *value);
+void silos_render_ui();
+bool silos_prepare_ui_renderers(std::size_t count);
+void silos_cleanup_app_ui(std::size_t app_index);
+UIAppBinding &silos_ui_binding(std::size_t app_index);
+UITemplateEngine &silos_ui_template_engine();
+void silos_ui_visit_roots(void (*visitor)(sobject *));
+void silos_ui_move_roots(sobject *from, sobject *to);
+
+extern std::size_t SilosRenderedAppCount;
+extern std::size_t SilosRenderedMountCount;
+extern std::size_t SilosRenderedListRowCount;
+extern std::size_t SilosRenderedInstructionCount;

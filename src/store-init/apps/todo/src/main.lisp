@@ -19,8 +19,8 @@
             ; character width. The Shell owns this immutable description.
             (ui-template todo-row-ui-temp (item todo-item)
               (ui-text "TODO:")
-              (ui-text (ui-field item desc) :width 32 :overflow ui-chop)
-              (ui-text (ui-field item status) :width 16 :overflow ui-chop)))
+              (ui-text (ui-field item desc) :width 300 :overflow ui-chop)
+              (ui-text (ui-field item status) :width 160 :overflow ui-chop)))
       (setq todo-items-store
             (store-bind "todo/items.csv" '(desc status) 0 5))
       (store-watch
@@ -46,7 +46,7 @@
               :source todo-items-ui
               :item-template todo-row-ui-temp
               :offset 0
-              :limit 5
+              :limit 50
               :pending "Loading to-dos..."
               :empty "No to-dos."
               :error "To-dos unavailable."))

@@ -1,36 +1,63 @@
 #include "SilOS/UI/Renderer.h"
 
-#include "SilOS/UI/PlatformSurface.h"
+#include "SilOS/FreeRTOS/QueueRuntime.h"
+#include "SilOS/Runtime/State.h"
+#include "SilOS/UI/IPlatformRenderEngine.h"
+#include "SilOS/UI/UIRenderEngine.h"
+#include "SilOS/UI/UITemplateEngine.h"
 
 namespace {
-const char *state_name(UiRenderState state) {
-  switch (state) {
-    case UiRenderState::Pending: return "pending";
-    case UiRenderState::Ready: return "ready";
-    case UiRenderState::Empty: return "empty";
-    case UiRenderState::Error: return "error";
-  }
-  return "error";
+UITemplateEngine TemplateEngine;
+UIRenderEngine RenderEngine;
+
+std::size_t current_app_count() { return AppCount; }
+
+sobject *app_display_name(std::size_t app_index) {
+  return AppDeclarations[app_index].display_name;
 }
 }
 
-void silos_ui_render_begin() { silos_ui_surface_begin(); }
+std::size_t SilosRenderedAppCount = 0;
+std::size_t SilosRenderedMountCount = 0;
+std::size_t SilosRenderedListRowCount = 0;
+std::size_t SilosRenderedInstructionCount = 0;
 
-void silos_ui_render_app_begin(std::size_t app_index, const char *name) {
-  silos_ui_surface_begin_app(app_index, name);
+void silos_render_ui() {
+  const UIRenderStats stats = RenderEngine.renderFrame(
+      silos_platform_render_engine(), silos_lock_ulisp_workspace,
+      silos_unlock_ulisp_workspace, current_app_count, app_display_name);
+  SilosRenderedAppCount = stats.apps;
+  SilosRenderedMountCount = stats.mounts;
+  SilosRenderedListRowCount = stats.rows;
+  SilosRenderedInstructionCount = stats.instructions;
+  UiPendingRendered = stats.pending;
+  UiReadyRendered = stats.ready;
 }
 
-void silos_ui_render_template_begin(std::size_t app_index,
-                                    std::size_t mount_index,
-                                    UiRenderState state, const char *message,
-                                    bool is_list) {
-  silos_ui_surface_begin_template(app_index, mount_index, state_name(state),
-                                  message, is_list);
+bool silos_prepare_ui_renderers(std::size_t count) {
+  // Renderers borrow bindings, so discard them before replacing binding
+  // storage and rebuild them only after the new storage is stable.
+  RenderEngine.clear();
+  if (!TemplateEngine.prepare(count)) return false;
+  if (RenderEngine.prepare(count, TemplateEngine)) return true;
+  (void)TemplateEngine.prepare(0);
+  return false;
 }
 
-void silos_ui_render_text(std::size_t app_index, std::size_t mount_index,
-                          int row_index, const char *field_name,
-                          const char *value) {
-  silos_ui_surface_add_text(app_index, mount_index, row_index, field_name,
-                            value);
+void silos_cleanup_app_ui(std::size_t app_index) {
+  TemplateEngine.clearApp(app_index);
+}
+
+UIAppBinding &silos_ui_binding(std::size_t app_index) {
+  return TemplateEngine.binding(app_index);
+}
+
+UITemplateEngine &silos_ui_template_engine() { return TemplateEngine; }
+
+void silos_ui_visit_roots(void (*visitor)(sobject *)) {
+  TemplateEngine.visitRoots(visitor);
+}
+
+void silos_ui_move_roots(sobject *from, sobject *to) {
+  TemplateEngine.moveRoots(from, to);
 }

@@ -94,10 +94,11 @@ The initial design uses separate FreeRTOS tasks for uLisp and the Shell UI:
 
 - The **uLisp task** owns evaluation, mutation, allocation, garbage collection,
   and compaction of the uLisp workspace.
-- The **Shell UI task** owns the binding registry, templates, layout policy, and
-  framebuffer. No other task writes to the framebuffer.
-- Browser or platform integration transports input and completed frames, but
-  does not inspect the uLisp workspace or render application values.
+- The **Shell UI task** owns render scheduling. Per-app registries and templates
+  remain rooted in uLisp memory; platform implementations own layout, caching,
+  drawing, and physical presentation.
+- Platform renderers receive borrowed uLisp values through required navigation
+  helpers and may project them directly or into target-native state.
 - Queues carry bounded commands, input, results, and completed-frame messages
   between owners. They do not carry pointers into the uLisp workspace.
 
@@ -113,21 +114,17 @@ repair.
 The first implementation should favour predictable behaviour over change
 tracking or partial rendering:
 
-1. The Shell UI task wakes at its selected refresh rate.
-2. It locks access to the uLisp workspace, preventing evaluation, mutation, GC,
-   and compaction.
-3. It traverses the active template and follows each referenced UiRef's binding
-   pair to its current value.
-4. It clears and redraws the complete framebuffer.
-5. It unlocks the uLisp workspace.
-6. It sends the completed framebuffer to the platform display or Browser
-   bridge, then waits for its next refresh.
+1. The Shell UI task wakes at the platform-configured refresh rate and starts a
+   semantic frame.
+2. For each app, it locks the workspace, traverses rooted templates and current
+   bindings directly, emits platform render operations, then unlocks.
+3. It ends the frame outside the workspace lock. The platform decides whether
+   to draw directly, buffer, cache, diff, or transfer output.
 
-Rendering while holding the workspace lock lets the Shell stream authoritative
-values directly from uLisp memory and avoids persistent native copies. If later
-measurements show that this blocks the uLisp task for too long, a bounded,
-per-refresh snapshot could shorten the lock interval. That optimisation is not
-part of the initial design.
+Rendering while holding each app's workspace lock streams authoritative values
+directly from uLisp memory without a persistent or transient portable snapshot.
+Lock duration is measured per app; platform presentation after `endFrame` does
+not hold the workspace lock.
 
 There is initially no variable change tracking, dirty-region tracking, or
 framebuffer revision mechanism. Every refresh reads all referenced bindings and
@@ -188,13 +185,11 @@ Template creation must validate these strings before the Shell stores them:
 - require the conversion to match the Lisp value type passed to the formatter;
 - reject `%n`, dynamic `*` width or precision, positional arguments, and
   unsupported length modifiers or conversions;
-- enforce a bounded maximum formatted output length; and
-- copy the validated format into Shell-owned template storage.
+- leave physical output limits and formatting storage to the platform renderer.
 
-uLisp strings are not contiguous C strings. To use `%s`, the renderer must copy
-the bounded content into a temporary render buffer or implement the supported
-string formatting while traversing uLisp string cells. Such temporary storage
-exists only during rendering and is not a second persistent application value.
+uLisp strings are not contiguous C strings. Shared helpers stream their
+characters directly to the platform renderer. A platform may choose a temporary
+formatting buffer, but portable UI traversal does not create one.
 
 The format language can become richer only when concrete application needs
 justify it. If C formatting later proves too large for the MCU or insufficient

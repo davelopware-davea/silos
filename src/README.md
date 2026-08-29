@@ -53,7 +53,8 @@ Runtime code is organized by ownership:
 - `SilOS/FreeRTOS/QueueRuntime.*` adapts those contracts to queues and tasks.
 - `SilOS/Runtime` owns shared state, app discovery/bootstrap, and completion
   and Shell-event pumping.
-- `SilOS/UI/Renderer.*` consumes the module-owned `PlatformSurface.h` seam;
+- `SilOS/UI/Renderer.*` consumes the module-owned
+  `IPlatformRenderEngine.h` seam;
   `SilOS/Platform/Browser/BrowserSurface.cpp` implements it with the DOM.
 - `SilOS/Platform/Browser` owns Emscripten/Arduino compatibility, preload
   import, target composition, and the bounded Browser test harness.

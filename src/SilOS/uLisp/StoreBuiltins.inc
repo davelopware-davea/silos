@@ -13,13 +13,12 @@ const char doc_storerowfield[] = "(store-row-field store-row-ref field)\nReads a
 struct SilosAppStoreBinding {
   object *ref = nil;
   object *watch = nil;
-  char name[StoreNameCapacity]{};
-  char field_names[InMemoryFieldsPerRowCapacity][InMemoryFieldNameCapacity]{};
-  std::size_t field_count = 0;
+  object *name = nil;
+  object *field_names = nil;
   std::size_t start = 0;
   std::size_t count = 0;
 };
-SilosAppStoreBinding SilosAppStoreBindings[SilosAppCapacity]{};
+std::vector<SilosAppStoreBinding> SilosAppStoreBindings;
 
 SilosAppStoreBinding &silos_current_store_binding() {
   if (CurrentAppIndex >= AppCount) error2("no current app");
@@ -88,20 +87,35 @@ object *silos_snapshot_store_ref (object *live_ref) {
   return snapshot;
 }
 
-object *silos_make_store_row_ref (const InMemoryStoreRow &row,
-                                  const char field_names[][InMemoryFieldNameCapacity],
-                                  std::size_t field_count) {
+object *silos_make_store_row_ref(const InMemoryStoreRow &row,
+                                 object *field_names) {
   object *value = nil;
   // Build only the fields named by STORE-BIND.  The row itself is generic:
   // source rows and to-do rows are both read through this same lookup path.
-  for (std::size_t index = field_count; index > 0; --index) {
-    const InMemoryStoreField *field = SourceStores.find_field(
-        row, field_names[index - 1]);
-    if (field == nullptr) continue;
-    protect(value);
-    object *field_value = lispstring(const_cast<char *>(field->value.c_str()));
-    value = silos_prepend_field(field->name, field_value, value);
-    unprotect();
+  while (field_names != nil) {
+    if (!consp(field_names) || !symbolp(first(field_names))) {
+      error2("invalid retained store fields");
+    }
+    object *field_name = first(field_names);
+    const InMemoryStoreField *field = nullptr;
+    for (const InMemoryStoreField &candidate : row.fields) {
+      if (silos_symbol_name_is(field_name, candidate.name.c_str())) {
+        field = &candidate;
+        break;
+      }
+    }
+    if (field != nullptr) {
+      protect(value);
+      object *field_value = lispstring(const_cast<char *>(field->value.c_str()));
+      protect(field_value);
+      object *entry = cons(field_name, field_value);
+      protect(entry);
+      value = cons(entry, value);
+      unprotect();
+      unprotect();
+      unprotect();
+    }
+    field_names = rest(field_names);
   }
 
   protect(value);
@@ -130,8 +144,7 @@ object *silos_make_store_row_ref (const InMemoryStoreRow &row,
 }
 
 object *silos_make_store_row_refs (const InMemoryStore &store,
-                                   const char field_names[][InMemoryFieldNameCapacity],
-                                   std::size_t field_count, std::size_t start,
+                                   object *field_names, std::size_t start,
                                    std::size_t count) {
   object *rows = nil;
   const std::size_t row_count = store.row_count();
@@ -145,8 +158,7 @@ object *silos_make_store_row_refs (const InMemoryStore &store,
   while (after_last_row != first_row) {
     --after_last_row;
     protect(rows);
-    object *row = silos_make_store_row_ref(*after_last_row, field_names,
-                                           field_count);
+    object *row = silos_make_store_row_ref(*after_last_row, field_names);
     protect(row);
     rows = cons(row, rows);
     unprotect();
@@ -275,12 +287,11 @@ object *fn_storerowfield (object *args, object *env) {
       !silos_symbol_is(silos_store_row_status(row), "silos-saving")) {
     error2("StoreRowRef fields are not readable");
   }
-  char name[InMemoryFieldNameCapacity];
   object *key = second(args);
-  if (!silos_copy_symbol_name(key, name, sizeof(name)))
+  if (!symbolp(key))
     error("StoreRowRef field name is not a supported symbol", key);
   object *value = silos_find_field(row, "value");
-  object *entry = silos_find_field(cdr(value), name);
+  object *entry = silos_find_symbol_field(cdr(value), key);
   if (entry == nil) error2("unknown StoreRowRef field");
   return cdr(entry);
 }
@@ -288,29 +299,29 @@ object *fn_storerowfield (object *args, object *env) {
 object *fn_storebind (object *args, object *env) {
   (void) env;
   SilosAppStoreBinding &binding = silos_current_store_binding();
-  char name[StoreNameCapacity];
-  cstring(checkstring(first(args)), name, sizeof(name));
+  object *name = checkstring(first(args));
   object *fields = second(args);
   const int start = checkinteger(third(args));
   const int count = checkinteger(first(cdr(cddr(args))));
-  if (SourceStores.get(name) == nullptr || start < 0 || count <= 0) {
+  const InMemoryStore *source = nullptr;
+  SourceStores.visit([&](const InMemoryStore &candidate) {
+    if (silos_ulisp_string_is(name, candidate.name())) source = &candidate;
+  });
+  if (source == nullptr || start < 0 || count <= 0) {
     error2("unsupported store-bind request");
   }
-  binding.field_count = 0;
-  while (fields != nil) {
-    if (!consp(fields) || binding.field_count == InMemoryFieldsPerRowCapacity ||
-        !silos_copy_symbol_name(first(fields),
-                                binding.field_names[binding.field_count],
-                                InMemoryFieldNameCapacity)) {
+  object *field_cursor = fields;
+  while (field_cursor != nil) {
+    if (!consp(field_cursor) || !symbolp(first(field_cursor))) {
       error2("unsupported store-bind fields");
     }
-    ++binding.field_count;
-    fields = rest(fields);
+    field_cursor = rest(field_cursor);
   }
   if (binding.ref != nil) error2("a store is already bound by this app");
 
   binding.ref = silos_make_pending_bind_ref();
-  std::snprintf(binding.name, sizeof(binding.name), "%s", name);
+  binding.name = name;
+  binding.field_names = fields;
   binding.start = static_cast<std::size_t>(start);
   binding.count = static_cast<std::size_t>(count);
   StoreBindStartedPending = true;
@@ -318,11 +329,10 @@ object *fn_storebind (object *args, object *env) {
   request.kind = StorageRequestKind::BindStore;
   request.app_index = CurrentAppIndex;
   request.app_generation = AppGenerations[CurrentAppIndex];
-  std::snprintf(request.store_name, sizeof(request.store_name), "%s", name);
   if (xQueueSend(StorageRequestQueue, &request, 0) != pdPASS) {
     error2("storage request queue is full");
   }
-  std::printf("store-bind=%s status=pending\n", name);
+  std::printf("store-bind=%s status=pending\n", source->name());
   return binding.ref;
 }
 
@@ -340,10 +350,12 @@ void silos_ulisp_complete_store_bind(const StorageCompletion &completion) {
   if (completion.app_index >= AppCount ||
       completion.app_generation != AppGenerations[completion.app_index]) return;
   SilosAppStoreBinding &binding = SilosAppStoreBindings[completion.app_index];
-  const InMemoryStore *store = SourceStores.get(completion.store_name);
+  const InMemoryStore *store = nullptr;
+  SourceStores.visit([&](const InMemoryStore &candidate) {
+    if (silos_ulisp_string_is(binding.name, candidate.name())) store = &candidate;
+  });
   configASSERT(store != nullptr);
   configASSERT(binding.ref != nil);
-  configASSERT(std::strcmp(completion.store_name, binding.name) == 0);
   object *value = silos_find_field(binding.ref, "value");
   object *metadata = silos_find_field(binding.ref, "meta");
   configASSERT(value != nil);
@@ -359,7 +371,7 @@ void silos_ulisp_complete_store_bind(const StorageCompletion &completion) {
   configASSERT(old_value != nil);
   StoreRefWatchObservedOldValueNil = cdr(old_value) == nil;
   cdr(value) = silos_make_store_row_refs(*store, binding.field_names,
-                                        binding.field_count, binding.start,
+                                        binding.start,
                                         binding.count);
   cdr(count) = number(listlength(cdr(value)));
   cdr(status) = silos_symbol("silos-ready");
@@ -372,8 +384,7 @@ void silos_ulisp_complete_store_bind(const StorageCompletion &completion) {
   ++StoreRefWatchInvocationCount;
   unprotect();
   StoreBindCompletedReady = true;
-  silos_render_ui();
-  std::printf("store-bind=%s status=ready watch=%d\n", completion.store_name,
+  std::printf("store-bind=%s status=ready watch=%d\n", store->name(),
               StoreRefWatchInvocationCount);
   const bool ready = true;
   configASSERT(xQueueSend(BindReadyQueue, &ready, portMAX_DELAY) == pdPASS);

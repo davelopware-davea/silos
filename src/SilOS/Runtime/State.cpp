@@ -1,9 +1,9 @@
 #include "SilOS/Runtime/State.h"
 
 InMemoryStoreBackend SourceStores;
-AppDeclaration AppDeclarations[SilosAppCapacity]{};
-bool AppStarted[SilosAppCapacity]{};
-std::uint32_t AppGenerations[SilosAppCapacity]{};
+std::vector<AppDeclaration> AppDeclarations;
+std::vector<bool> AppStarted;
+std::vector<std::uint32_t> AppGenerations;
 std::size_t AppCount = 0;
 std::size_t CurrentAppIndex = SilosInvalidAppIndex;
 std::uint32_t NextAppGeneration = 0;
@@ -26,4 +26,4 @@ bool StoreRefWatchObservedReady = false;
 bool StoreRefWatchObservedCount = false;
 bool StoreRefWatchObservedOldPending = false;
 bool StoreRefWatchObservedOldValueNil = false;
-char StoreRefWatchObservedDescription[StoreRefWatchObservedDescriptionCapacity]{};
+std::string StoreRefWatchObservedDescription;

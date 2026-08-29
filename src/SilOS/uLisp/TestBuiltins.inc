@@ -10,8 +10,7 @@ object *fn_silostestwatchobservation (object *args, object *env) {
       !silos_symbol_is(old_status, "silos-pending")) {
     error2("unexpected StoreRef watch observation");
   }
-  cstring(checkstring(third(args)), StoreRefWatchObservedDescription,
-          sizeof(StoreRefWatchObservedDescription));
+  StoreRefWatchObservedDescription = silos_ulisp_string(checkstring(third(args)));
   ++StoreRefWatchObservationCount;
   StoreRefWatchObservedReady = true;
   StoreRefWatchObservedCount = true;

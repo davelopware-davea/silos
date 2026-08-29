@@ -28,15 +28,15 @@ void vSilOSAssert(const char *file, int line);
 #define configSUPPORT_STATIC_ALLOCATION 0
 #define configCHECK_FOR_STACK_OVERFLOW 0
 #define configUSE_MALLOC_FAILED_HOOK 1
-#define configUSE_MUTEXES 0
+#define configUSE_MUTEXES 1
 #define configUSE_RECURSIVE_MUTEXES 0
 #define configUSE_COUNTING_SEMAPHORES 0
 #define configUSE_TASK_NOTIFICATIONS 0
 #define configQUEUE_REGISTRY_SIZE 0
 #define configUSE_TIMERS 0
-// uLisp, storage, Shell-event forwarding, client verification, and the idle
-// task are all deliberate fixed participants in this Browser proof.
-#define configEMSCRIPTEN_MAX_TASKS 5U
+// uLisp, storage, Shell-event forwarding, UI rendering, client verification,
+// and idle are deliberate task roles in this Browser proof.
+#define configEMSCRIPTEN_MAX_TASKS 6U
 #define configEMSCRIPTEN_ASYNCIFY_STACK_BYTES 16384U
 #define INCLUDE_vTaskDelay 1
 #define INCLUDE_vTaskDelete 1

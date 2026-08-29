@@ -53,6 +53,10 @@ add_executable(silos_todo_boot
   SilOS/Runtime/State.cpp
   SilOS/Store/InMemoryStoreBackend.cpp
   SilOS/UI/Renderer.cpp
+  SilOS/UI/UIAppBinding.cpp
+  SilOS/UI/UIAppRenderer.cpp
+  SilOS/UI/UIRenderEngine.cpp
+  SilOS/UI/UITemplateEngine.cpp
   "${FREERTOS_EMSCRIPTEN_PORT}/port.c"
   "${FREERTOS_KERNEL}/list.c"
   "${FREERTOS_KERNEL}/queue.c"

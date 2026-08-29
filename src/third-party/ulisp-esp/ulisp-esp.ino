@@ -481,6 +481,9 @@ flags_t Flags = 1<<PRINTREADABLY; // Set by default
 object *tee;
 void pfstring (const char *s, pfun_t pfun);
 void silos_mark_roots ();
+void silos_move_roots (object *from, object *to);
+void silos_before_load_image ();
+bool silos_after_load_image ();
 
 // Error handling
 
@@ -816,12 +819,14 @@ void movepointer (object *from, object *to) {
       }
     }
   }
+  silos_move_roots(from, to);
 }
 
 uintptr_t compactimage (object **arg) {
   markobject(tee);
   markobject(GlobalEnv);
   markobject(GCStack);
+  silos_mark_roots();
   object *firstfree = Workspace;
   while (marked(firstfree)) firstfree++;
   object *obj = &Workspace[WORKSPACESIZE-1];
@@ -994,6 +999,7 @@ unsigned int loadimage (object *arg) {
     file = SD.open("/ULISP.IMG");
     if (!file) error2("problem loading from SD card");
   } else error(invalidarg, arg);
+  silos_before_load_image();
   SDReadInt(file);
   unsigned int imagesize = SDReadInt(file);
   GlobalEnv = (object *)SDReadInt(file);
@@ -1005,6 +1011,7 @@ unsigned int loadimage (object *arg) {
   }
   file.close();
   gc(NULL, NULL);
+  if (!silos_after_load_image()) error2("SilOS app rebootstrap failed");
   return imagesize;
 #elif defined(LITTLEFS)
   if (!LittleFS.begin()) error2("problem mounting LittleFS");
@@ -1019,6 +1026,7 @@ unsigned int loadimage (object *arg) {
     if (!file) error2("problem loading from LittleFS");
   }
   else error(invalidarg, arg);
+  silos_before_load_image();
   FSRead32(file);
   unsigned int imagesize = FSRead32(file);
   GlobalEnv = (object *)FSRead32(file);
@@ -1030,11 +1038,13 @@ unsigned int loadimage (object *arg) {
   }
   file.close();
   gc(NULL, NULL);
+  if (!silos_after_load_image()) error2("SilOS app rebootstrap failed");
   return imagesize;
 #elif defined(EEPROMSIZE)
   (void) arg;
   EEPROM.begin(EEPROMSIZE);
   int addr = 0;
+  silos_before_load_image();
   EpromReadInt(&addr); // Skip eval address
   unsigned int imagesize = EpromReadInt(&addr);
   if (imagesize == 0 || imagesize == 0xFFFFFFFF) error2("no saved image");
@@ -1046,6 +1056,7 @@ unsigned int loadimage (object *arg) {
     cdr(obj) = (object *)EpromReadInt(&addr);
   }
   gc(NULL, NULL);
+  if (!silos_after_load_image()) error2("SilOS app rebootstrap failed");
   return imagesize;
 #else
   (void) arg;

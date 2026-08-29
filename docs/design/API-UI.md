@@ -31,8 +31,8 @@ The UI has four distinct objects:
   The binding's current value remains authoritative in uLisp; a UiRef does not
   copy it.  A UiRef has an ID, generation, declared type, revision, and UI
   status.
-- A **template** is immutable Shell-owned formatting/layout metadata.  It holds
-  UiRef IDs or typed item-field slot IDs, never Lisp values or heap pointers.
+- A **template** is an immutable rooted uLisp declaration. It refers to UiRefs
+  and typed fields without copying literals or live values into native storage.
 - A **list template** names a source UiRef, an item template, and a fixed
   visible window.  It is a template, not a materialised list of row widgets.
 - A **mount** makes one template or list template available for Shell
@@ -40,10 +40,10 @@ The UI has four distinct objects:
   coordinates, fonts, and line height.
 
 The uLisp task alone evaluates Lisp, changes UiRefs and StoreRefs, and invokes
-watches.  The Shell owns templates, mounts, layout, and the framebuffer.  A
-Shell refresh obtains synchronised read access to the workspace and streams
-current values directly into the framebuffer; it neither retains pointers into
-the Lisp heap nor creates persistent formatted-value copies.
+watches. A dedicated UI task obtains synchronised read access for one app at a
+time and streams borrowed uLisp declarations and current values through the
+platform render interface. The platform owns layout, caching, drawing, and
+physical presentation.
 
 ### `ui-bind`
 
@@ -150,11 +150,9 @@ row. It may combine literals with supported live UiRef properties:
 ### `ui-text`
 
 `ui-text` streams either a string literal or its `ui-field` value as text while
-rendering. A literal uses `(ui-text "text")`; it is copied once into
-exact-length, immutable template-owned storage and emitted in declaration order
-for every item. Templates do not impose a public instruction-count or literal-
-length cap: declaration allocates exactly the descriptor count and string bytes
-required by the form.
+rendering. A literal uses `(ui-text "text")`; the original declaration is rooted
+and the literal is streamed from uLisp memory in declaration order for every
+item. Templates impose no public instruction-count or literal-length cap.
 A field form accepts the bounded text options defined by the template grammar,
 including `:width` and `:overflow ui-chop` in this increment. The supported
 non-item projection currently formats the integer StoreRef `count` property.
@@ -199,8 +197,8 @@ For an ordinary list, `nil` selects `:empty`; otherwise the visible window is
 rendered.  For a StoreRef source, `silos-pending` selects `:pending`,
 `silos-error` selects `:error`, and `silos-ready` selects `:empty` or the visible
 window using its current
-collection of StoreRowRefs.  The supplied state text is a bounded literal
-owned by the list template.  Row-level StoreRowRef failure is rendered by the
+collection of StoreRowRefs. The supplied state text remains in the rooted list
+declaration. Row-level StoreRowRef failure is rendered by the
 row's field formatter as an invalid value; this increment does not add a
 per-row error template.
 
@@ -213,8 +211,8 @@ display and interaction context.
 
 ## 4. Refresh, invalidation, and StoreRefs
 
-The Shell refreshes dirty mounted views at its configured bounded cadence.  A
-refresh redraws the complete mount and all rows in its visible window.  It does
+The UI task renders mounted views at its platform-configured cadence. A refresh
+visits the complete mount and all rows in its visible window. It does
 not do field-level or row-level retained invalidation.  This deliberately
 catches list membership, ordering, array-slot replacement, and in-place string
 changes without a subscription per item.
@@ -282,38 +280,18 @@ Releasing a list also removes its internally owned StoreRef/row watches.
 Releasing a UiRef invalidates its ID by incrementing its generation, so stale
 template handles are rejected rather than reused.  Stopping or reloading an
 app performs this cleanup automatically, including mounts, templates, UiRefs,
-internal watches, their GC roots, dynamically allocated instruction arrays,
-and template-owned literal strings.
+internal watches and their GC roots.
 
-The first implementation uses these compile-time capacities per app:
+UiRefs, record types, templates, mounts, instructions, fields, visible rows,
+names, literals, and state text have no project-wide compile-time capacity.
+Their declarations retain uLisp objects and fail only when the workspace or
+catalogue cannot allocate required registration cells. Publication is atomic:
+a rejected declaration leaves existing UI state unchanged.
 
-| Resource | Capacity | Failure behaviour |
-| --- | ---: | --- |
-| UiRefs | 16 | declaration signals `ui-capacity` |
-| record types | 8 | declaration signals `ui-capacity` |
-| templates, including lists | 12 | declaration signals `ui-capacity` |
-| instructions per template | dynamically allocated; no API cap | declaration fails atomically if native allocation fails |
-| mounts | 8 | `ui-mount` signals `ui-capacity` |
-| StoreRef watch entries owned by lists | 16 (two per store list) | list declaration signals `ui-capacity` |
-| visible rows per list (`:limit`) | 5 | declaration rejects the limit |
-| list state text | 48 bytes in the first implementation | declaration rejects the text |
-| `ui-text` literal text | exact-length dynamic allocation; no API cap | declaration fails atomically if native allocation fails |
-| temporary formatted field output | 32 bytes | formatter clips and reports a render error |
-
-Fixed capacities in this table are hard bounds, not starting allocation sizes.
-`ui-template` is the exception: it validates a complete declaration into
-temporary, dynamically owned storage, then publishes the immutable template in
-one step. Failure releases every candidate descriptor and string, leaving the
-existing UI unchanged.
-
-Removing the two per-template caps does not make template resource use free or
-literally infinite. Developers must keep declarations moderate: instruction
-descriptors consume native memory, literal bytes consume native memory, and
-each instruction adds work to every rendered row. Available memory, allocation
-fragmentation, uLisp's ability to hold the declaration, and the source/store
-transport can still reject or prevent a very large form. Platform profiles may
-diagnose or budget those risks, but they must not introduce a public semantic
-limit on instruction count or `ui-text` literal length.
+`:limit` bounds how many rows a list traverses and `:width` bounds presentation;
+neither reserves a corresponding native array or text buffer. Platform
+implementations may impose physical clipping or use target-native formatting
+storage without changing the UI data contract.
 
 ## Non-goals of this increment
 
@@ -339,6 +317,5 @@ are deliberately outside this API contract:
 - the complete formatter grammar (including date representation, padding, and
   an alternative to `ui-chop`), and how render errors appear visually;
 - whether list `:offset` later becomes a bounded UiRef for scrolling;
-- capacity values after Browser and reference-MCU measurements, especially
-  watch-table cost and workspace-lock duration; and
+- Browser and reference-MCU workspace-lock duration and render cost; and
 - StoreRef conflict/retry/deletion semantics and public watch-handle removal.

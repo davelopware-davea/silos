@@ -11,11 +11,9 @@
 #include <string>
 #include <string_view>
 #include <sys/stat.h>
+#include <vector>
 
 namespace {
-constexpr std::size_t StoreInitPathCapacity = InMemoryStoreNameCapacity + 16;
-constexpr std::size_t CsvFieldValueCapacity = 256;
-
 bool has_suffix(const char *text, const char *suffix) {
   const std::size_t text_length = std::strlen(text);
   const std::size_t suffix_length = std::strlen(suffix);
@@ -23,10 +21,18 @@ bool has_suffix(const char *text, const char *suffix) {
          std::strcmp(text + text_length - suffix_length, suffix) == 0;
 }
 
-bool join_path(char destination[], std::size_t capacity, const char *parent,
-               const char *child) {
-  const int written = std::snprintf(destination, capacity, "%s/%s", parent, child);
-  return written > 0 && static_cast<std::size_t>(written) < capacity;
+bool join_path(std::string &destination, std::string_view parent,
+               std::string_view child) {
+  try {
+    destination.assign(parent);
+    destination.push_back('/');
+    destination.append(child);
+    return true;
+  } catch (const std::bad_alloc &) {
+    return false;
+  } catch (const std::length_error &) {
+    return false;
+  }
 }
 
 bool read_file(const char *path, std::string &content) {
@@ -81,70 +87,65 @@ bool append_source_lines(const char *store_name, const std::string &content,
   return true;
 }
 
-enum class CsvRecordResult { Record, End, Malformed };
+enum class CsvRecordResult { Record, End, Malformed, NoMemory };
 
 CsvRecordResult read_csv_record(const char *&cursor,
-                                char values[][CsvFieldValueCapacity],
-                                std::size_t &value_count) {
+                                std::vector<std::string> &values) {
   if (*cursor == '\0') return CsvRecordResult::End;
-  value_count = 0;
-  for (;;) {
-    if (value_count == InMemoryFieldsPerRowCapacity) return CsvRecordResult::Malformed;
-    char *value = values[value_count];
-    std::size_t value_length = 0;
-    const bool quoted = *cursor == '"';
-    if (quoted) ++cursor;
+  values.clear();
+  try {
+    for (;;) {
+      std::string value;
+      const bool quoted = *cursor == '"';
+      if (quoted) ++cursor;
 
-    bool closed_quote = !quoted;
-    while (*cursor != '\0') {
-      const char character = *cursor;
-      if (quoted && character == '"') {
-        if (cursor[1] == '"') {
-          if (value_length + 1 >= CsvFieldValueCapacity) {
-            return CsvRecordResult::Malformed;
+      bool closed_quote = !quoted;
+      while (*cursor != '\0') {
+        const char character = *cursor;
+        if (quoted && character == '"') {
+          if (cursor[1] == '"') {
+            value.push_back('"');
+            cursor += 2;
+            continue;
           }
-          value[value_length++] = '"';
-          cursor += 2;
-          continue;
+          ++cursor;
+          closed_quote = true;
+          break;
         }
+        if (!quoted &&
+            (character == ',' || character == '\n' || character == '\r')) {
+          break;
+        }
+        if (!quoted && character == '"') return CsvRecordResult::Malformed;
+        if (quoted && (character == '\n' || character == '\r')) {
+          return CsvRecordResult::Malformed;
+        }
+        value.push_back(character);
         ++cursor;
-        closed_quote = true;
-        break;
       }
-      if (!quoted && (character == ',' || character == '\n' || character == '\r')) {
-        break;
-      }
-      if (!quoted && character == '"') return CsvRecordResult::Malformed;
-      // Multiline CSV fields are deliberately outside this bounded bootstrap
-      // importer.  Quoted commas and doubled quotes remain supported.
-      if (quoted && (character == '\n' || character == '\r')) {
-        return CsvRecordResult::Malformed;
-      }
-      if (value_length + 1 >= CsvFieldValueCapacity) {
-        return CsvRecordResult::Malformed;
-      }
-      value[value_length++] = character;
-      ++cursor;
-    }
-    if (!closed_quote) return CsvRecordResult::Malformed;
-    value[value_length] = '\0';
-    ++value_count;
+      if (!closed_quote) return CsvRecordResult::Malformed;
+      values.push_back(std::move(value));
 
-    if (*cursor == ',') {
-      ++cursor;
-      continue;
+      if (*cursor == ',') {
+        ++cursor;
+        continue;
+      }
+      if (*cursor == '\r') {
+        if (cursor[1] != '\n') return CsvRecordResult::Malformed;
+        cursor += 2;
+        return CsvRecordResult::Record;
+      }
+      if (*cursor == '\n') {
+        ++cursor;
+        return CsvRecordResult::Record;
+      }
+      if (*cursor == '\0') return CsvRecordResult::Record;
+      return CsvRecordResult::Malformed;
     }
-    if (*cursor == '\r') {
-      if (cursor[1] != '\n') return CsvRecordResult::Malformed;
-      cursor += 2;
-      return CsvRecordResult::Record;
-    }
-    if (*cursor == '\n') {
-      ++cursor;
-      return CsvRecordResult::Record;
-    }
-    if (*cursor == '\0') return CsvRecordResult::Record;
-    return CsvRecordResult::Malformed;  // Text after a closing quote.
+  } catch (const std::bad_alloc &) {
+    return CsvRecordResult::NoMemory;
+  } catch (const std::length_error &) {
+    return CsvRecordResult::NoMemory;
   }
 }
 
@@ -152,36 +153,34 @@ bool append_csv_rows(const char *store_name, const char content[],
                      InMemoryStoreBackend &stores, StoreInitLoadResult &result) {
   if (!stores.create_store(store_name)) return false;
   const char *cursor = content;
-  char headers[InMemoryFieldsPerRowCapacity][CsvFieldValueCapacity]{};
-  std::size_t field_count = 0;
-  if (read_csv_record(cursor, headers, field_count) != CsvRecordResult::Record ||
-      field_count == 0) {
+  std::vector<std::string> headers;
+  if (read_csv_record(cursor, headers) != CsvRecordResult::Record ||
+      headers.empty()) {
     return false;
   }
-  for (std::size_t index = 0; index < field_count; ++index) {
-    if (headers[index][0] == '\0' ||
-        std::strlen(headers[index]) >= InMemoryFieldNameCapacity) {
-      return false;
-    }
+  for (std::size_t index = 0; index < headers.size(); ++index) {
+    if (headers[index].empty()) return false;
     for (std::size_t earlier = 0; earlier < index; ++earlier) {
-      if (std::strcmp(headers[earlier], headers[index]) == 0) return false;
+      if (headers[earlier] == headers[index]) return false;
     }
   }
 
   std::uint32_t id = 1;
   for (;;) {
-    char values[InMemoryFieldsPerRowCapacity][CsvFieldValueCapacity]{};
-    std::size_t value_count = 0;
-    const CsvRecordResult parsed = read_csv_record(cursor, values, value_count);
+    std::vector<std::string> values;
+    const CsvRecordResult parsed = read_csv_record(cursor, values);
     if (parsed == CsvRecordResult::End) return true;
-    if (parsed != CsvRecordResult::Record || value_count != field_count || id == 0) {
+    if (parsed != CsvRecordResult::Record || values.size() != headers.size() ||
+        id == 0) {
       return false;
     }
-    InMemoryStoreFieldInput fields[InMemoryFieldsPerRowCapacity]{};
-    for (std::size_t index = 0; index < field_count; ++index) {
+    std::vector<InMemoryStoreFieldInput> fields(headers.size());
+    for (std::size_t index = 0; index < headers.size(); ++index) {
       fields[index] = InMemoryStoreFieldInput{headers[index], values[index]};
     }
-    if (!stores.append_row(store_name, id++, 1, fields, field_count)) return false;
+    if (!stores.append_row(store_name, id++, 1, fields.data(), fields.size())) {
+      return false;
+    }
     ++result.csv_row_count;
   }
 }
@@ -204,13 +203,17 @@ bool import_file(const char *full_path, const char *store_name,
 
 bool import_directory(const char *root, const char *relative,
                       InMemoryStoreBackend &stores, StoreInitLoadResult &result) {
-  char directory_path[StoreInitPathCapacity]{};
+  std::string directory_path;
   if (relative[0] == '\0') {
-    std::snprintf(directory_path, sizeof(directory_path), "%s", root);
-  } else if (!join_path(directory_path, sizeof(directory_path), root, relative)) {
+    try {
+      directory_path = root;
+    } catch (const std::bad_alloc &) {
+      return false;
+    }
+  } else if (!join_path(directory_path, root, relative)) {
     return false;
   }
-  DIR *directory = opendir(directory_path);
+  DIR *directory = opendir(directory_path.c_str());
   if (directory == nullptr) return false;
 
   bool succeeded = true;
@@ -220,30 +223,31 @@ bool import_directory(const char *root, const char *relative,
     if (std::strcmp(entry->d_name, ".") == 0 || std::strcmp(entry->d_name, "..") == 0) {
       continue;
     }
-    char child_relative[InMemoryStoreNameCapacity]{};
+    std::string child_relative;
     if (relative[0] == '\0') {
-      const int written = std::snprintf(child_relative, sizeof(child_relative), "%s",
-                                        entry->d_name);
-      if (written < 0 || static_cast<std::size_t>(written) >= sizeof(child_relative)) {
+      try {
+        child_relative = entry->d_name;
+      } catch (const std::bad_alloc &) {
         succeeded = false;
         break;
       }
-    } else if (!join_path(child_relative, sizeof(child_relative), relative, entry->d_name)) {
+    } else if (!join_path(child_relative, relative, entry->d_name)) {
       succeeded = false;
       break;
     }
-    char child_path[StoreInitPathCapacity]{};
-    if (!join_path(child_path, sizeof(child_path), root, child_relative)) {
+    std::string child_path;
+    if (!join_path(child_path, root, child_relative)) {
       succeeded = false;
       break;
     }
     struct stat details {};
-    if (stat(child_path, &details) != 0) {
+    if (stat(child_path.c_str(), &details) != 0) {
       succeeded = false;
     } else if (S_ISDIR(details.st_mode)) {
-      succeeded = import_directory(root, child_relative, stores, result);
+      succeeded = import_directory(root, child_relative.c_str(), stores, result);
     } else if (S_ISREG(details.st_mode)) {
-      succeeded = import_file(child_path, child_relative, stores, result);
+      succeeded = import_file(child_path.c_str(), child_relative.c_str(), stores,
+                              result);
     } else {
       succeeded = false;
     }

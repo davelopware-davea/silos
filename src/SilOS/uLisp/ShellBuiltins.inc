@@ -1,7 +1,7 @@
 const char doc_shelleventtype[] = "(shell-event-type event)";
 const char doc_shellrequestpoke[] = "(shell-request-poke type arg...)";
-object *SilosActiveHandlers[SilosAppCapacity]{};
-bool SilosPokePending[SilosAppCapacity]{};
+std::vector<object *> SilosActiveHandlers;
+std::vector<bool> SilosPokePending;
 // Copy one admissible Lisp value into a bounded flat native arena. The queue
 // therefore owns data, not a uLisp pointer which could be reclaimed or mutate
 // before the Shell's later delivery turn.
@@ -155,6 +155,29 @@ void silos_cleanup_apps() {
   }
   AppCount = 0;
   CurrentAppIndex = SilosInvalidAppIndex;
+  (void)silos_prepare_ui_renderers(0);
+  SilosAppStoreBindings.clear();
+  SilosActiveHandlers.clear();
+  SilosPokePending.clear();
+  AppDeclarations.clear();
+  AppStarted.clear();
+  AppGenerations.clear();
   xQueueReset(ShellRequestQueue);
   xQueueReset(ShellEventQueue);
+}
+
+bool silos_ulisp_prepare_apps(std::size_t count) {
+  try {
+    if (!silos_prepare_ui_renderers(count)) return false;
+    SilosAppStoreBindings.resize(count);
+    SilosActiveHandlers.resize(count, nil);
+    SilosPokePending.resize(count, false);
+    return true;
+  } catch (const std::bad_alloc &) {
+    (void)silos_prepare_ui_renderers(0);
+    SilosAppStoreBindings.clear();
+    SilosActiveHandlers.clear();
+    SilosPokePending.clear();
+    return false;
+  }
 }

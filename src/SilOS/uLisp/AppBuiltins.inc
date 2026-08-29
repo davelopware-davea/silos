@@ -5,17 +5,17 @@ const char doc_shellapponevent[] = "(shell-app-on-event handler)\nRegisters the 
 // the later, bounded describe-mode experiment.
 object *fn_shellappregister (object *args, object *env) {
   (void) env;
-  char name[32];
-  char entry[48];
   args = cdr(args);                         // Skip :name.
-  cstring(checkstring(first(args)), name, sizeof(name));
+  object *display_name = checkstring(first(args));
+  std::string name = silos_ulisp_string(display_name);
   args = cdr(cdr(args));                    // Skip name and :ideal-width.
   int ideal_width = checkinteger(first(args));
   args = cdr(cdr(args));                    // Skip width and :ideal-height.
   int ideal_height = checkinteger(first(args));
   args = cdr(cdr(args));                    // Skip height and :entry.
-  cstring(checkstring(first(args)), entry, sizeof(entry));
-  silos_capture_app_declaration(name, ideal_width, ideal_height, entry);
+  std::string entry = silos_ulisp_string(checkstring(first(args)));
+  silos_capture_app_declaration(display_name, std::move(name), ideal_width, ideal_height,
+                                std::move(entry));
   return tee;
 }
 
