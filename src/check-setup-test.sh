@@ -4,7 +4,8 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly TEMP_DIR="$(mktemp -d)"
 readonly BIN_DIR="$TEMP_DIR/bin"
-mkdir "$BIN_DIR"
+readonly PACMAN_BIN_DIR="$TEMP_DIR/pacman-bin"
+mkdir "$BIN_DIR" "$PACMAN_BIN_DIR"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
 ln -s "$(command -v sed)" "$BIN_DIR/sed"
@@ -20,6 +21,20 @@ if (( status == 0 )) || [[ "$output" != *"Ninja is not on PATH"* ]] ||
    [[ "$output" != *"sudo apt-get install -y ninja-build"* ]] ||
    [[ "$output" == *"Emscripten is not activated"* ]]; then
   printf 'unexpected first-failure diagnostic:\n%s\n' "$output" >&2
+  exit 1
+fi
+
+ln -s "$(command -v sed)" "$PACMAN_BIN_DIR/sed"
+ln -s /bin/true "$PACMAN_BIN_DIR/pacman"
+cp "$BIN_DIR/cmake" "$PACMAN_BIN_DIR/cmake"
+
+set +e
+output="$(PATH="$PACMAN_BIN_DIR" "$BASH" "$SCRIPT_DIR/check-setup.sh" 2>&1)"
+status=$?
+set -e
+if (( status == 0 )) || [[ "$output" != *"Ninja is not on PATH"* ]] ||
+   [[ "$output" != *"sudo pacman -S --needed --noconfirm ninja"* ]]; then
+  printf 'unexpected pacman diagnostic:\n%s\n' "$output" >&2
   exit 1
 fi
 

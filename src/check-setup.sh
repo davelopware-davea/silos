@@ -23,6 +23,9 @@ run_fix() {
     brew)
       brew install "$argument"
       ;;
+    pacman)
+      sudo pacman -S --needed --noconfirm "$argument"
+      ;;
     activate-emsdk)
       # This script is sourced by the build entry points, so activation remains
       # in effect for the configure and build commands that follow.
@@ -75,6 +78,7 @@ offer_package_fix() {
   local problem="$1"
   local apt_package="$2"
   local brew_package="$3"
+  local pacman_package="${4:-$brew_package}"
 
   if command -v apt-get >/dev/null 2>&1; then
     offer_fix "$problem" \
@@ -82,6 +86,10 @@ offer_package_fix() {
       apt "$apt_package"
   elif command -v brew >/dev/null 2>&1; then
     offer_fix "$problem" "  brew install $brew_package" brew "$brew_package"
+  elif command -v pacman >/dev/null 2>&1; then
+    offer_fix "$problem" \
+      "  sudo pacman -S --needed --noconfirm $pacman_package" \
+      pacman "$pacman_package"
   else
     setup_fail "$problem" "Install $brew_package and ensure it is on PATH."
   fi
