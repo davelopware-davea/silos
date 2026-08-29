@@ -4,6 +4,12 @@
 
 - [`docs/design/SilOS_PLAN.md`](docs/design/SilOS_PLAN.md) is the authoritative **project-wide SilOS plan**. Consult it for all project planning and update it only when SilOS-level decisions, milestones, requirements, or plans change.
 
+## Build and test
+
+- Use [`src/build.sh`](src/build.sh) as the repository build entry point.
+- Use [`src/test.sh`](src/test.sh) as the repository test entry point; it invokes `build.sh` itself.
+- Run these scripts instead of constructing direct CMake, Ninja, or CTest commands. They select the supported build configuration and run `check-setup.sh`, which reports missing dependencies and their fixes.
+- Lower-level build commands are appropriate only when the task is specifically diagnosing or changing the build scripts themselves. Finish verification through `build.sh` or `test.sh` as applicable.
 
 ## Communication style
 
