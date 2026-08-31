@@ -45,6 +45,12 @@ time and streams borrowed uLisp declarations and current values through the
 platform render interface. The platform owns layout, caching, drawing, and
 physical presentation.
 
+Separate UiRefs may refer to independent bindings of the same named Store.
+Each traverses its canonical StoreRef projection without copying, while
+store-level writability is shared across those StoreRefs. A bounded
+`store-wait-until-writable` call releases the uLisp workspace lock, so the UI
+task continues rendering the last coherent values during the wait.
+
 ### `ui-bind`
 
 `ui-bind` resolves an existing named binding in the current lexical environment

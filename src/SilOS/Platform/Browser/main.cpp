@@ -13,7 +13,7 @@
 
 #include <emscripten.h>
 
-#include "SilOS/Store/InMemoryStoreBackend.h"
+#include "SilOS/Store/InMemoryStorageEngine.h"
 #include "SilOS/Platform/Browser/BrowserStoreInitLoader.h"
 #include "SilOS/UI/IPlatformRenderEngine.h"
 #include "SilOS/UI/Renderer.h"
@@ -157,6 +157,7 @@ void client_task(void *) {
                       silos_ui_binding(todo_app).refCount() == 1 &&
                       silos_ui_binding(todo_app).templateCount() == 3 &&
                       silos_ui_binding(todo_app).mountCount() == 2 &&
+                      silos_store_engine().bindingCount(todo_app) == 2 &&
                       silos_ui_binding(status_app).typeCount() == 0 &&
                       silos_ui_binding(status_app).refCount() == 0 &&
                       silos_ui_binding(status_app).templateCount() == 1 &&

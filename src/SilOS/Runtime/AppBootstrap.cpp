@@ -1,7 +1,7 @@
 #include "SilOS/Runtime/AppBootstrap.h"
 
 #include "SilOS/Runtime/State.h"
-#include "SilOS/Store/InMemoryStoreBackend.h"
+#include "SilOS/Store/IPlatformStorageEngine.h"
 #include "SilOS/uLisp/RuntimeAdapter.h"
 
 #include <cstdio>
@@ -19,14 +19,16 @@ bool is_app_manifest_name(const char *name) {
 }
 }
 
-bool silos_bootstrap_apps(InMemoryStoreBackend &stores) {
+bool silos_bootstrap_apps(IPlatformStorageEngine &stores) {
   bool found_manifest = false;
   bool loaded = true;
   silos_cleanup_apps();
   std::size_t manifest_count = 0;
-  stores.visit([&](const InMemoryStore &store) {
-    if (is_app_manifest_name(store.name())) ++manifest_count;
-  });
+  struct CountContext { std::size_t *count; } count_context{&manifest_count};
+  stores.visit([](const IPlatformStore &store, void *raw) {
+    auto &context = *static_cast<CountContext *>(raw);
+    if (is_app_manifest_name(store.name())) ++*context.count;
+  }, &count_context);
   try {
     AppDeclarations.resize(manifest_count);
     AppStarted.resize(manifest_count);
@@ -38,24 +40,27 @@ bool silos_bootstrap_apps(InMemoryStoreBackend &stores) {
     return false;
   }
   if (!silos_ulisp_prepare_apps(manifest_count)) return false;
-  stores.visit([&](const InMemoryStore &store) {
+  struct LoadContext { bool *found; bool *loaded; IPlatformStorageEngine *stores; };
+  LoadContext load_context{&found_manifest, &loaded, &stores};
+  stores.visit([](const IPlatformStore &store, void *raw) {
+    auto &context = *static_cast<LoadContext *>(raw);
     if (!is_app_manifest_name(store.name())) return;
-    found_manifest = true;
+    *context.found = true;
     CurrentAppIndex = AppCount++;
     AppDeclarations[CurrentAppIndex] = AppDeclaration{};
     AppStarted[CurrentAppIndex] = false;
     AppGenerations[CurrentAppIndex] = ++NextAppGeneration;
-    loaded = silos_ulisp_evaluate(store) &&
-             AppDeclarations[CurrentAppIndex].present && loaded;
-    const InMemoryStore *entry =
-        stores.get(AppDeclarations[CurrentAppIndex].entry.c_str());
-    loaded = entry != nullptr && silos_ulisp_evaluate(*entry) &&
-             AppStarted[CurrentAppIndex] && loaded;
+    *context.loaded = silos_ulisp_evaluate(store) &&
+             AppDeclarations[CurrentAppIndex].present && *context.loaded;
+    const IPlatformStore *entry =
+        context.stores->get(AppDeclarations[CurrentAppIndex].entry.c_str());
+    *context.loaded = entry != nullptr && silos_ulisp_evaluate(*entry) &&
+             AppStarted[CurrentAppIndex] && *context.loaded;
     std::printf("manifest=%s app=%s entry=%s started=%s\n", store.name(),
                 AppDeclarations[CurrentAppIndex].name.c_str(),
                 AppDeclarations[CurrentAppIndex].entry.c_str(),
                 AppStarted[CurrentAppIndex] ? "yes" : "no");
-  });
+  }, &load_context);
   CurrentAppIndex = SilosInvalidAppIndex;
   return found_manifest && loaded;
 }

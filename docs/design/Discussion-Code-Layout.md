@@ -76,7 +76,8 @@ the seam is directly discoverable; capability-only headers may use the
 
 ```text
 SilOS/UI/IPlatformRenderEngine.h
-SilOS/Store/PlatformPersistence.h
+SilOS/Store/IPlatformStorageEngine.h
+SilOS/Store/IPlatformStore.h
 SilOS/Shell/PlatformEventTransport.h
 ```
 
@@ -86,8 +87,8 @@ A target implementation lives under its platform directory and is named
 ```text
 SilOS/Platform/Browser/BrowserSurface.h
 SilOS/Platform/Browser/BrowserSurface.cpp
-SilOS/Platform/Browser/BrowserPersistence.h
-SilOS/Platform/Browser/BrowserPersistence.cpp
+SilOS/Platform/Browser/BrowserStorageEngine.h
+SilOS/Platform/Browser/BrowserStorageEngine.cpp
 ```
 
 An interface is owned by the module whose needs define it, not by the target

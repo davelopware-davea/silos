@@ -5,6 +5,8 @@
 #include "SilOS/UI/IPlatformRenderEngine.h"
 #include "SilOS/UI/UIAppBinding.h"
 #include "SilOS/UI/UITemplateEngine.h"
+#include "SilOS/Store/StoreEngine.h"
+#include "SilOS/Store/StoreRuntime.h"
 #include "SilOS/uLisp/Common.inc"
 #include "SilOS/uLisp/AppBuiltins.inc"
 #include "SilOS/uLisp/StoreBuiltins.inc"

@@ -14,6 +14,8 @@
   { "store-row-error", fn_storerowerror, 0211, doc_storerowerror },
   { "store-row-field", fn_storerowfield, 0222, doc_storerowfield },
   { "store-watch", fn_storewatch, 0222, doc_storewatch },
+  { "store-blocked-p", fn_storeblockedp, 0211, doc_storeblockedp },
+  { "store-wait-until-writable", fn_storewaituntilwritable, 0222, doc_storewaituntilwritable },
   { "ui-type", fn_uitype, 0327, doc_uitype },
   { "ui-bind", fn_uibind, 0322, doc_uibind },
   { "ui-template", fn_uitemplate, 0327, doc_uitemplate },

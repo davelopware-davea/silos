@@ -17,6 +17,11 @@ ulisp::Object *ulisp::findPair(Object *name, Object *environment) {
 }
 ulisp::Object *ulisp::makeNumber(int value) { return number(value); }
 ulisp::Object *ulisp::makeCons(Object *head, Object *tail) { return cons(head, tail); }
+ulisp::Object *ulisp::makeString(const char *value) {
+  return lispstring(const_cast<char *>(value));
+}
+ulisp::Object *ulisp::trueValue() { return tee; }
+void ulisp::setTail(Object *entry, Object *value) { cdr(entry) = value; }
 void ulisp::pushRoot(Object *value) { protect(value); }
 void ulisp::popRoot() { unprotect(); }
 void ulisp::error(const char *message) { error2(message); }
@@ -79,6 +84,8 @@ object *silos_symbol (const char *name) {
   }
   return internlong(const_cast<char *>(name));
 }
+
+ulisp::Object *ulisp::makeSymbol(const char *name) { return silos_symbol(name); }
 
 char *SilosSymbolDestination = nullptr;
 std::size_t SilosSymbolCapacity = 0;
@@ -161,6 +168,12 @@ ulisp::Object *ulisp::findField(Object *record, const char *name) {
 }
 ulisp::Object *ulisp::findSymbolField(Object *record, Object *name) {
   return silos_find_symbol_field(record, name);
+}
+ulisp::Object *ulisp::prependField(const char *name, Object *value, Object *tail) {
+  return silos_prepend_field(name, value, tail);
+}
+bool ulisp::stringEquals(Object *value, const char *text) {
+  return silos_ulisp_string_is(value, text);
 }
 
 namespace {

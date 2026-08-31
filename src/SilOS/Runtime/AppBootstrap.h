@@ -1,5 +1,5 @@
 #pragma once
 
-class InMemoryStoreBackend;
+class IPlatformStorageEngine;
 
-bool silos_bootstrap_apps(InMemoryStoreBackend &stores);
+bool silos_bootstrap_apps(IPlatformStorageEngine &stores);

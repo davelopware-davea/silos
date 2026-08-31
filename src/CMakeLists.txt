@@ -51,7 +51,10 @@ add_executable(silos_todo_boot
   SilOS/Runtime/AppBootstrap.cpp
   SilOS/Runtime/EventPump.cpp
   SilOS/Runtime/State.cpp
-  SilOS/Store/InMemoryStoreBackend.cpp
+  SilOS/Store/InMemoryStorageEngine.cpp
+  SilOS/Store/StoreEngine.cpp
+  SilOS/Store/StoreRuntime.cpp
+  SilOS/Store/StoreService.cpp
   SilOS/UI/Renderer.cpp
   SilOS/UI/UIAppBinding.cpp
   SilOS/UI/UIAppRenderer.cpp
@@ -91,8 +94,9 @@ set_property(TARGET silos_todo_boot APPEND PROPERTY LINK_DEPENDS "${STORE_INIT_F
 set_target_properties(silos_todo_boot PROPERTIES OUTPUT_NAME "silos-todo-boot" SUFFIX ".js")
 
 add_executable(silos_store_backend_test
-  SilOS/Store/InMemoryStoreBackendTest.cpp
-  SilOS/Store/InMemoryStoreBackend.cpp
+  SilOS/Store/InMemoryStorageEngineTest.cpp
+  SilOS/Store/InMemoryStorageEngine.cpp
+  SilOS/Store/StoreService.cpp
 )
 target_compile_features(silos_store_backend_test PRIVATE cxx_std_17)
 target_compile_options(silos_store_backend_test PRIVATE -Wall -Wextra -Werror)

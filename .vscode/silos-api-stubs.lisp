@@ -7,7 +7,7 @@
 ;;;
 ;;; Keep these lambda lists aligned with docs/design/API-*.md while those
 ;;; documents remain the authoritative descriptions of the proposed APIs.
-;;; API docs SHA-256: d934c85c2f57559445bb4c46d64461bb4dfd424de70441bd2c40657aca0c6400
+;;; API docs SHA-256: 2a66d0ae55379811841e0d9356514e760fd90908b25f9b5cf4112637ecc7bdd5
 
 (in-package #:cl-user)
 
@@ -23,6 +23,7 @@
           mqtt-watch
           mqtt-subscribe
           store-bind
+          store-blocked-p
           store-create
           store-delete
           store-error
@@ -44,6 +45,7 @@
           store-status
           store-value
           store-watch
+          store-wait-until-writable
           ui-bind
           ui-date
           ui-field
@@ -84,6 +86,14 @@
 (defun store-bind (name fields start count)
   (declare (ignore name fields start count))
   (%silos-editor-only 'store-bind))
+
+(defun store-blocked-p (ref)
+  (declare (ignore ref))
+  (%silos-editor-only 'store-blocked-p))
+
+(defun store-wait-until-writable (ref timeout-ms)
+  (declare (ignore ref timeout-ms))
+  (%silos-editor-only 'store-wait-until-writable))
 
 (defun store-status (ref)
   (declare (ignore ref))

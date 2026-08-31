@@ -12,6 +12,8 @@ Draft recorded on 14 August 2026.
 | [`store-delete`](#store-delete) | Delete one exact store. |
 | [`store-get`](#store-get) | Read a bounded row snapshot. |
 | [`store-bind`](#store-bind) | Bind a bounded live row window. |
+| [`store-blocked-p`](#store-blocked-p) | Test whether a bound store accepts mutations. |
+| [`store-wait-until-writable`](#store-wait-until-writable) | Wait briefly for a bound store to accept mutations. |
 | [`store-status`](#store-status) | Read a StoreRef operation status. |
 | [`store-error`](#store-error) | Read a StoreRef error. |
 | [`store-value`](#store-value) | Read a ready StoreRef's operation result. |
@@ -232,6 +234,40 @@ through `store-row-count`.
 Each StoreRowRef has its own stable ID, revision, status, error, and value.
 Record identity never depends on the row's current array index.
 
+Applications may bind the same named store more than once, including with
+different fields or windows. Each call returns an independent StoreRef and has
+its own request status and watches. All such bindings share one store-level
+mutation gate, including bindings owned by different applications.
+
+### Store writability
+
+#### `store-blocked-p`
+
+```lisp
+(store-blocked-p ref)
+```
+
+Returns `t` when the named store associated with `ref` has a mutation in
+progress and cannot accept another mutation; otherwise returns `nil`. Reads and
+new bindings remain allowed. Every StoreRef associated with the same named
+store observes the same state.
+
+#### `store-wait-until-writable`
+
+```lisp
+(store-wait-until-writable ref timeout-ms)
+```
+
+Waits until the store associated with `ref` becomes writable or the timeout
+expires. `timeout-ms` is required and must be an integer from 0 through 1000;
+zero performs a non-blocking poll. Returns `t` when writable and `nil` on
+timeout.
+
+SilOS currently has one uLisp task, so waiting pauses all uLisp application
+evaluation. It does not block the independent Store or UI tasks. The UI keeps
+rendering the last coherent rooted values while the uLisp workspace lock is
+released. Store watch callbacks are not invoked re-entrantly during the wait.
+
 ### Store accessors
 
 These accessors apply to a StoreRef returned by an operation. They make its
@@ -375,6 +411,11 @@ value that does not satisfy the schema. `setf` is deliberately supported here:
 the operation is a row-field update, not mutation of the underlying
 representation, and the setter is where the asynchronous write and validation
 semantics are defined.
+
+The setter also checks the row's shared store-level mutation gate. If another
+mutation is in progress, it leaves the field unchanged and raises a busy error.
+Code that prefers to wait may call `store-wait-until-writable` first, but the
+setter always rechecks to close the wake-up race.
 
 The row state progresses as follows:
 

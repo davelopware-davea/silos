@@ -2,6 +2,7 @@
 ; and registered event-handler closure retain them between later event turns.
 (let ((todo-row-ui-temp nil)
       (todo-items-store nil)
+      (todo-summary-store nil)
       (todo-items-ui nil)
       (todo-list-ui-ltemp nil)
       (todo-list-ui-mount nil)
@@ -23,6 +24,10 @@
               (ui-text (ui-field item status) :width 160 :overflow ui-chop)))
       (setq todo-items-store
             (store-bind "todo/items.csv" '(desc status) 0 5))
+      ; A second independent bind to the same named store proves that requests
+      ; share BoundStore coordination without sharing their window or fields.
+      (setq todo-summary-store
+            (store-bind "todo/items.csv" '(status) 0 1))
       (store-watch
         todo-items-store
         (lambda (live old-value)

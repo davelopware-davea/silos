@@ -1,6 +1,6 @@
 #include "SilOS/Platform/Browser/BrowserStoreInitLoader.h"
 
-#include "SilOS/Store/InMemoryStoreBackend.h"
+#include "SilOS/Store/InMemoryStorageEngine.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -59,9 +59,9 @@ bool read_file(const char *path, std::string &content) {
 }
 
 bool append_source_lines(const char *store_name, const std::string &content,
-                         InMemoryStoreBackend &stores,
+                         InMemoryStorageEngine &stores,
                          StoreInitLoadResult &result) {
-  if (!stores.create_store(store_name)) return false;
+  if (!stores.createStore(store_name)) return false;
   std::size_t line_start = 0;
   std::uint32_t id = 1;
   while (line_start < content.size()) {
@@ -73,8 +73,8 @@ bool append_source_lines(const char *store_name, const std::string &content,
     const std::size_t line_length = line_end - line_start;
     if (id == 0) return false;
     const std::string_view line(content.data() + line_start, line_length);
-    const InMemoryStoreFieldInput field{"text", line};
-    if (!stores.append_row(store_name, id++, 1, &field, 1)) return false;
+    const StoreFieldInput field{"text", line};
+    if (!stores.appendRow(store_name, id++, 1, &field, 1)) return false;
     ++result.source_row_count;
 
     if (line_end == content.size()) break;
@@ -150,8 +150,8 @@ CsvRecordResult read_csv_record(const char *&cursor,
 }
 
 bool append_csv_rows(const char *store_name, const char content[],
-                     InMemoryStoreBackend &stores, StoreInitLoadResult &result) {
-  if (!stores.create_store(store_name)) return false;
+                     InMemoryStorageEngine &stores, StoreInitLoadResult &result) {
+  if (!stores.createStore(store_name)) return false;
   const char *cursor = content;
   std::vector<std::string> headers;
   if (read_csv_record(cursor, headers) != CsvRecordResult::Record ||
@@ -174,11 +174,11 @@ bool append_csv_rows(const char *store_name, const char content[],
         id == 0) {
       return false;
     }
-    std::vector<InMemoryStoreFieldInput> fields(headers.size());
+    std::vector<StoreFieldInput> fields(headers.size());
     for (std::size_t index = 0; index < headers.size(); ++index) {
-      fields[index] = InMemoryStoreFieldInput{headers[index], values[index]};
+      fields[index] = StoreFieldInput{headers[index], values[index]};
     }
-    if (!stores.append_row(store_name, id++, 1, fields.data(), fields.size())) {
+    if (!stores.appendRow(store_name, id++, 1, fields.data(), fields.size())) {
       return false;
     }
     ++result.csv_row_count;
@@ -186,7 +186,7 @@ bool append_csv_rows(const char *store_name, const char content[],
 }
 
 bool import_file(const char *full_path, const char *store_name,
-                 InMemoryStoreBackend &stores, StoreInitLoadResult &result) {
+                 InMemoryStorageEngine &stores, StoreInitLoadResult &result) {
   std::string content;
   if (!read_file(full_path, content)) return false;
   bool imported = false;
@@ -202,7 +202,7 @@ bool import_file(const char *full_path, const char *store_name,
 }
 
 bool import_directory(const char *root, const char *relative,
-                      InMemoryStoreBackend &stores, StoreInitLoadResult &result) {
+                      InMemoryStorageEngine &stores, StoreInitLoadResult &result) {
   std::string directory_path;
   if (relative[0] == '\0') {
     try {
@@ -256,7 +256,7 @@ bool import_directory(const char *root, const char *relative,
 }
 }
 
-bool load_store_init(const char *root, InMemoryStoreBackend &stores,
+bool load_store_init(const char *root, InMemoryStorageEngine &stores,
                      StoreInitLoadResult &result) {
   result = StoreInitLoadResult{};
   return root != nullptr && import_directory(root, "", stores, result);

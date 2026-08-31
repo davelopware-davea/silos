@@ -17,9 +17,14 @@ object *fn_uitype(object *args, object *env) {
 }
 
 object *fn_uibind(object *args, object *env) {
+  object *binding = findpair(first(args), env);
+  if (binding == nil ||
+      !silos_store_owns_ref(current_ui_app(), cdr(binding))) {
+    error2("invalid ui source");
+  }
   return silos_ui_template_engine().bind(
       current_ui_app(), args, env,
-      SilosAppStoreBindings[CurrentAppIndex].ref);
+      cdr(binding));
 }
 
 object *fn_uitemplate(object *args, object *env) {

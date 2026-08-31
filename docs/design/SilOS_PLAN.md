@@ -14,7 +14,8 @@ material is kept separate: [UiRefs and templates](Discussion-VariableBindingAndT
 [Shell UI](Discussion-Shell-UI.md), and
 [storage and MQTT references](Discussion-QueueMetaphors.md). The implemented
 [zero-copy UI refactor](RefactorPlan-UI-Rendering-Pipeline.md) records its
-supporting implementation plan. The completed
+supporting implementation plan. The Store class and task refactor is recorded
+in [RefactorPlan-UI-OOP-Store.md](RefactorPlan-UI-OOP-Store.md). The completed
 [FreeWisp plan](../../experiments/freertos-ulisp-browser/plan.md) supplies
 Browser-substrate evidence.
 
@@ -98,6 +99,9 @@ promoted to [`src/`](../../src/). The following general approach is locked:
   declarations and values to a platform-owned renderer;
 - Lisp source stores preserve one editable source line per stable-ID Store row. The initial implementation uses dynamically sized linked rows and string values so line count and length are limited by available memory rather than arbitrary per-store constants; that backing remains hidden behind the Store interface for later replacement with measured, target-appropriate block allocation;
 - StoreRefs and UiRefs provide stable language-visible live references, while reusable flow templates describe presentation without a conventional application-owned UI tree;
+- every named store has shared BoundStore coordination across applications,
+  while individual store-bind calls retain independent StoreRefs, windows,
+  fields, and watches behind platform-owned storage interfaces;
 - platform drawing is separated from Store, UI, Shell, and Runtime policy;
   portable UI deliberately uses allocation-free uLisp navigation helpers
   because uLisp objects are its canonical in-memory representation; and

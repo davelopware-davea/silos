@@ -3,6 +3,8 @@
 #include "SilOS/Runtime/State.h"
 #include "SilOS/UI/IPlatformRenderEngine.h"
 #include "SilOS/UI/Renderer.h"
+#include "SilOS/Store/StoreRuntime.h"
+#include "SilOS/Store/StoreService.h"
 
 #include <cstdio>
 
@@ -19,8 +21,8 @@ SemaphoreHandle_t ULispWorkspaceMutex = nullptr;
 }
 
 void silos_create_runtime_queues() {
-  StorageRequestQueue = xQueueCreate(1, sizeof(StorageRequest));
-  StorageCompletionQueue = xQueueCreate(1, sizeof(StorageCompletion));
+  StorageRequestQueue = xQueueCreate(8, sizeof(StorageRequest));
+  StorageCompletionQueue = xQueueCreate(8, sizeof(StorageCompletion));
   BindReadyQueue = xQueueCreate(1, sizeof(bool));
   ShellRequestQueue = xQueueCreate(4, sizeof(ShellRequest));
   ShellEventQueue = xQueueCreate(4, sizeof(ShellEvent));
@@ -45,10 +47,7 @@ void silos_storage_task(void *) {
   for (;;) {
     StorageRequest request{};
     configASSERT(xQueueReceive(StorageRequestQueue, &request, portMAX_DELAY) == pdPASS);
-    StorageCompletion completion{};
-    completion.kind = request.kind;
-    completion.app_index = request.app_index;
-    completion.app_generation = request.app_generation;
+    const StorageCompletion completion = silos_store_service().process(request);
     configASSERT(xQueueSend(StorageCompletionQueue, &completion, portMAX_DELAY) == pdPASS);
   }
 }

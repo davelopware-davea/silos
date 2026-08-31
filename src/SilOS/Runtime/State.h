@@ -1,7 +1,8 @@
 #pragma once
 
 #include "SilOS/Shell/Events.h"
-#include "SilOS/Store/InMemoryStoreBackend.h"
+#include "SilOS/Store/InMemoryStorageEngine.h"
+#include "SilOS/Store/Messages.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -23,19 +24,7 @@ struct AppDeclaration {
   bool present = false;
 };
 
-enum class StorageRequestKind { BindStore };
-struct StorageRequest {
-  StorageRequestKind kind = StorageRequestKind::BindStore;
-  std::size_t app_index = 0;
-  std::uint32_t app_generation = 0;
-};
-struct StorageCompletion {
-  StorageRequestKind kind = StorageRequestKind::BindStore;
-  std::size_t app_index = 0;
-  std::uint32_t app_generation = 0;
-};
-
-extern InMemoryStoreBackend SourceStores;
+extern InMemoryStorageEngine SourceStores;
 extern std::vector<AppDeclaration> AppDeclarations;
 extern std::vector<bool> AppStarted;
 extern std::vector<std::uint32_t> AppGenerations;

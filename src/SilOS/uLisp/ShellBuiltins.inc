@@ -121,7 +121,7 @@ void silos_ulisp_dispatch_shell_event(const ShellEvent &event) {
   if (event.kind == ShellEventKind::AppInitialise) {
     AppInitialiseDelivered = true;
     AppObservedNoBindBeforeInit =
-        SilosAppStoreBindings[CurrentAppIndex].ref == nil;
+        silos_store_engine().bindingCount(CurrentAppIndex) == 0;
     object *type = silos_symbol("shell-app-initialise");
     protect(type);
     event_value = cons(type, nil);
@@ -146,8 +146,8 @@ void silos_ulisp_dispatch_shell_event(const ShellEvent &event) {
 void silos_cleanup_apps() {
   for (std::size_t index = 0; index < AppCount; ++index) {
     silos_cleanup_app_ui(index);
+    silos_clear_store_app(index);
     SilosActiveHandlers[index] = nil;
-    SilosAppStoreBindings[index] = SilosAppStoreBinding{};
     SilosPokePending[index] = false;
     AppDeclarations[index] = AppDeclaration{};
     AppStarted[index] = false;
@@ -156,7 +156,7 @@ void silos_cleanup_apps() {
   AppCount = 0;
   CurrentAppIndex = SilosInvalidAppIndex;
   (void)silos_prepare_ui_renderers(0);
-  SilosAppStoreBindings.clear();
+  silos_clear_store();
   SilosActiveHandlers.clear();
   SilosPokePending.clear();
   AppDeclarations.clear();
@@ -169,13 +169,16 @@ void silos_cleanup_apps() {
 bool silos_ulisp_prepare_apps(std::size_t count) {
   try {
     if (!silos_prepare_ui_renderers(count)) return false;
-    SilosAppStoreBindings.resize(count);
+    if (!silos_prepare_store(count)) {
+      (void)silos_prepare_ui_renderers(0);
+      return false;
+    }
     SilosActiveHandlers.resize(count, nil);
     SilosPokePending.resize(count, false);
     return true;
   } catch (const std::bad_alloc &) {
     (void)silos_prepare_ui_renderers(0);
-    SilosAppStoreBindings.clear();
+    (void)silos_prepare_store(0);
     SilosActiveHandlers.clear();
     SilosPokePending.clear();
     return false;

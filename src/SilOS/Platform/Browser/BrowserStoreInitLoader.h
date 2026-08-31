@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-class InMemoryStoreBackend;
+class InMemoryStorageEngine;
 
 struct StoreInitLoadResult {
   std::size_t store_count = 0;
@@ -13,5 +13,5 @@ struct StoreInitLoadResult {
 // Imports the preloaded directory tree into the volatile catalogue. The exact
 // store name is each file's normalized path relative to root, including its
 // extension (for example, apps/todo/app.lisp or todo/items.csv).
-bool load_store_init(const char *root, InMemoryStoreBackend &stores,
+bool load_store_init(const char *root, InMemoryStorageEngine &stores,
                      StoreInitLoadResult &result);

@@ -1,6 +1,6 @@
 #include "SilOS/Runtime/State.h"
 
-InMemoryStoreBackend SourceStores;
+InMemoryStorageEngine SourceStores;
 std::vector<AppDeclaration> AppDeclarations;
 std::vector<bool> AppStarted;
 std::vector<std::uint32_t> AppGenerations;

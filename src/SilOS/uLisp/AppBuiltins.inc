@@ -20,16 +20,17 @@ object *fn_shellappregister (object *args, object *env) {
 }
 
 namespace {
-const InMemoryStore *SilosCurrentSource = nullptr;
-InMemoryStore::const_iterator SilosCurrentRow;
+const IPlatformStore *SilosCurrentSource = nullptr;
+std::size_t SilosCurrentRow = 0;
 std::size_t SilosCurrentCharacter = 0;
 bool SilosSourceAtEnd = false;
 
 int silos_read_source_character() {
   while (SilosCurrentSource != nullptr &&
-         SilosCurrentRow != SilosCurrentSource->end()) {
-    const InMemoryStoreField *text = SourceStores.find_field(
-        *SilosCurrentRow, "text");
+         SilosCurrentRow < SilosCurrentSource->rowCount()) {
+    const StoreRow *row = SilosCurrentSource->rowAt(SilosCurrentRow);
+    configASSERT(row != nullptr);
+    const StoreField *text = SilosCurrentSource->findField(*row, "text");
     configASSERT(text != nullptr);
     if (SilosCurrentCharacter < text->value.size()) {
       return static_cast<unsigned char>(text->value[SilosCurrentCharacter++]);
@@ -43,9 +44,9 @@ int silos_read_source_character() {
 }
 }
 
-bool silos_ulisp_evaluate(const InMemoryStore &store) {
+bool silos_ulisp_evaluate(const IPlatformStore &store) {
   SilosCurrentSource = &store;
-  SilosCurrentRow = store.begin();
+  SilosCurrentRow = 0;
   SilosCurrentCharacter = 0;
   SilosSourceAtEnd = false;
   if (setjmp(toplevel_handler)) {

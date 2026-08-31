@@ -77,7 +77,7 @@ input, or persistence. Its public Lisp source never traverses StoreRef or
 StoreRowRef `meta`/`value` records directly; those compact association lists
 remain runtime-private behind the typed Store accessors.
 
-`SilOS/Store/InMemoryStoreBackend.{h,cpp}` contains the initial in-memory
+`SilOS/Store/InMemoryStorageEngine.{h,cpp}` contains the initial in-memory
 catalogue. Every store has the same generic row representation: stable `id`
 and `revision` metadata plus a bounded array of named string fields. Rows use a
 linked standard-library container and field values use dynamically sized
