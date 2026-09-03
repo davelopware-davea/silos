@@ -3,6 +3,7 @@
 ## Planning
 
 - [`docs/design/SilOS_PLAN.md`](docs/design/SilOS_PLAN.md) is the authoritative **project-wide SilOS plan**. Consult it for all project planning and update it only when SilOS-level decisions, milestones, requirements, or plans change.
+- [`docs/design/Spec-ShellUI.md`](docs/design/Spec-ShellUI.md) is the authoritative **Shell UI interaction and layout specification**. Consult it when planning, implementing, or reviewing Shell UI behavior.
 
 ## Build and test
 

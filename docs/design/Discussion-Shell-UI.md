@@ -7,7 +7,8 @@ Conversation begun on 17 August 2026.
 This note records an exploratory discussion of the SilOS Shell UI, including
 how it receives, normalises, routes, and applies user input. It is discussion
 material, not an agreed design or a replacement for the authoritative
-[SilOS plan](SilOS_PLAN.md).
+[SilOS plan](SilOS_PLAN.md). The decisions validated after this discussion are
+specified in [Spec-ShellUI.md](Spec-ShellUI.md).
 
 **Related:** [Variable Binding and Templates](Discussion-VariableBindingAndTemplates.md)
 defines UiRefs and templates; [Queue Metaphors](Discussion-QueueMetaphors.md)
@@ -75,6 +76,14 @@ enters an editable field, or enters a list. A list then exposes its items, and
 an item can in turn expose its components. `Back` reverses that path one level
 at a time, eventually returning to app-level focus and then to the Shell menu.
 
+In Multi App mode, app-level navigation follows the column structure rather
+than wrapping through a flat app list. Up and Down select the adjacent app in
+the same column and stop at the column ends. Left and Right select only the
+adjacent column and stop at the outer columns. In the destination column, focus
+moves to the lowest app whose top edge is at or above the previous app's top
+edge. This gives a deterministic result when the columns have different row
+counts or heights.
+
 ## Tiny mode
 
 When a display cannot accommodate a useful multi-app layout, the Shell enters a
@@ -110,39 +119,39 @@ be offered; Close remains subject to the same later lifecycle decision.
 
 ## Layout mode
 
-At app-level focus, a Shell-recognised double `Activate` gesture can enter
-layout mode for the focused app. This gesture is not delivered to the app. The
-Shell overlays its own controls at the top of that app, initially **Resize**,
-**Move**, **Maximise** (or **Normalise** when already maximised), and
-potentially **Close**.
+At app-level focus, a Shell-recognised double `Activate` gesture opens an app
+menu in the Shell-owned bottom line. This gesture is not delivered to the app.
+The menu currently offers **Move**, **Resize**, and **Settings**. Settings
+replaces the app workspace until the user returns; it is not a pop-over.
 
 ```text
 app-level focus
-  -> double Activate -> app layout mode
+  -> double Activate -> app menu
   -> Activate Resize / Move -> resize or move mode
-  -> Back -> app layout mode
+  -> Activate or Back -> app menu
   -> Back -> app-level focus on the same app
 ```
 
-In resize mode, navigation moves the app's bottom-right edge within Shell-set
-limits; its top-left edge remains fixed. In move mode, navigation shifts the
-whole app within those limits. Neither operation creates overlapping apps.
-Instead, it changes the selected app's requested allocation and the Shell
-reflows the whole layout, respecting every app's minimum size and balancing
-their ideal sizes where possible. The layout algorithm should be deterministic,
-with the manipulated app's requested edge or position taking priority, so that
-the result remains understandable.
+Multi App layout is a two-dimensional, non-overlapping set of columns. Columns
+run left-to-right; apps within a column run top-to-bottom. There is no separate
+horizontal/vertical axis setting.
 
-**Maximise** gives the selected app the whole display and retains the prior
-layout allocation. It becomes **Normalise** while maximised; selecting it
-restores the retained allocation and reflows the other apps. Back accepts the
-current placement and moves one level up; it does not restore the pre-operation
-placement. Layout commands and placements are Shell-owned and persist per
-display profile.
+In Move, Up and Down reorder the focused app within its column. Moving beyond
+the bottom transfers it to the bottom of the next column, or creates a new
+rightmost column. Moving beyond the top similarly transfers it to the top of
+the previous column, or creates a new leftmost column. Left and Right transfer
+the app directly to the adjacent column at the nearest row, creating an outer
+column if necessary. Empty columns collapse. This makes combining and splitting
+columns possible with only directional input.
 
-`Close` needs a later lifecycle decision: it might hide an app from the current
-layout, stop it, or both. It should not be assumed to discard application data,
-and likely needs confirmation.
+In Resize, Left always narrows and Right always widens the containing column;
+Up always shortens and Down always makes the app taller within that column. These
+meanings do not change with the column or row position. A sole visible app
+always occupies the full column height, so vertical resize is a no-op and does
+not change its remembered relative height. That height applies again when the
+app returns to a multi-app column. Activate and Back both accept the current
+adjustment and return to the app menu. Layout commands and placements are
+Shell-owned and may later persist per display profile.
 
 ## Bottom-line editing
 

@@ -11,7 +11,8 @@ Ideas are not commitments. Detailed alternatives and earlier recommendations are
 Project-level code ownership and platform boundaries are recorded in the
 [SilOS code-layout discussion](Discussion-Code-Layout.md). Supporting design
 material is kept separate: [UiRefs and templates](Discussion-VariableBindingAndTemplates.md),
-[Shell UI](Discussion-Shell-UI.md), and
+the adopted [Shell UI specification](Spec-ShellUI.md), supporting
+[Shell UI discussion](Discussion-Shell-UI.md), and
 [storage and MQTT references](Discussion-QueueMetaphors.md). The implemented
 [zero-copy UI refactor](RefactorPlan-UI-Rendering-Pipeline.md) records its
 supporting implementation plan. The Store class and task refactor is recorded
@@ -104,7 +105,9 @@ promoted to [`src/`](../../src/). The following general approach is locked:
   fields, and watches behind platform-owned storage interfaces;
 - platform drawing is separated from Store, UI, Shell, and Runtime policy;
   portable UI deliberately uses allocation-free uLisp navigation helpers
-  because uLisp objects are its canonical in-memory representation; and
+  because uLisp objects are its canonical in-memory representation;
+- Shell interaction, focus, screen composition, and Single App/Multi App layout
+  follow the adopted [Shell UI specification](Spec-ShellUI.md); and
 - the Browser target uses Emscripten WebAssembly, cooperative fibers, preloaded startup stores, and a narrow Browser surface adapter.
 
 Public operations, record representations, capacities, rendering strategy, and
@@ -231,7 +234,8 @@ Plan each milestone only when the preceding prototype supplies enough evidence.
 
 The following areas matter, but do not need detailed recommendations yet:
 
-- exact visual language, fonts, palette, layout, accessibility, touch, and mouse behaviour;
+- remaining visual details, exact fonts, accessibility, touch, and mouse behaviour
+  beyond the adopted Shell UI specification;
 - general application lifecycle, packaging, loading, and capability manifests;
 - storage beyond the needs of the current application;
 - networking protocols and addressing;

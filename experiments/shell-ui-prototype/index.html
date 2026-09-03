@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SilOS Shell UI prototype</title>
+  <!-- Nested Frame Shell UI. THROWAWAY PROTOTYPE. -->
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #d8e0d6;
+      --dim: #7d887d;
+      --paper: #0a0d0a;
+      --line: #899489;
+      --focus: #f5f7ed;
+      --screen-w: 900px;
+      --screen-h: 540px;
+      --font-size: 15px;
+      font-family: "Courier New", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #161a17;
+      color: var(--ink);
+      overflow: hidden;
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    #prototype {
+      height: calc(100vh - 86px);
+      display: grid;
+      place-items: center;
+      padding: 18px;
+    }
+    .device {
+      position: relative;
+      width: min(var(--screen-w), calc(100vw - 36px));
+      height: min(var(--screen-h), calc(100vh - 122px));
+      min-height: 260px;
+      overflow: hidden;
+      background: var(--paper);
+      color: var(--ink);
+      font-size: var(--font-size);
+      line-height: 1.15;
+      box-shadow: 0 18px 60px #0009;
+    }
+    .device[data-profile="tiny"] {
+      --screen-w: 768px;
+      --screen-h: 384px;
+      --font-size: 27px;
+    }
+    .device[data-profile="sbc"] { --screen-w: 720px; --screen-h: 480px; --font-size: 17px; }
+    .device[data-profile="desktop"] { --screen-w: 820px; --screen-h: 615px; --font-size: 13px; }
+    .device[data-profile="browser"] { --screen-w: 960px; --screen-h: 600px; --font-size: 15px; }
+    .device.invert { --ink: #101410; --dim: #4b544b; --paper: #dbe3d8; --line: #273127; --focus: #000; }
+    .screen {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      min-width: 0;
+      min-height: 0;
+    }
+    .label, .system-label, .app-title, .mount-title, .row-number {
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      white-space: nowrap;
+    }
+    .muted { color: var(--dim); }
+    .context-action {
+      border: 1px solid var(--line);
+      background: transparent;
+      padding: .25em .55em;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .current {
+      border-color: var(--focus) !important;
+      outline: max(1px, .11em) solid var(--focus);
+      outline-offset: calc(max(1px, .11em) * -2);
+      color: var(--focus);
+    }
+    .ancestor { border-color: var(--focus) !important; }
+    .workspace {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      gap: .4em;
+      overflow: hidden;
+    }
+    .workspace.single { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+    .layout-column {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      gap: .4em;
+      overflow: hidden;
+    }
+    .app-pane {
+      border: 1px solid var(--line);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .app-pane.app-context {
+      border: .22em double var(--focus);
+      outline: .12em solid var(--focus);
+      outline-offset: -.42em;
+    }
+    .app-title {
+      padding: .2em .45em;
+      border-bottom: 1px solid var(--line);
+    }
+    .mounts {
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      scrollbar-width: none;
+      padding: .3em;
+    }
+    .mount {
+      border: 1px solid var(--line);
+      margin-bottom: .35em;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .mount-title { padding: .16em .35em; border-bottom: 1px dotted var(--line); color: var(--dim); font-size: .78em; }
+    .flow, .row { display: flex; flex-wrap: wrap; align-items: baseline; gap: .18em .32em; padding: .3em; }
+    .row { position: relative; border-bottom: 1px dotted var(--line); padding-left: 2.2em; }
+    .row:last-child { border-bottom: 0; }
+    .row-number { position: absolute; left: .35em; color: var(--dim); font-size: .75em; }
+    .field { border: 1px solid transparent; padding: .08em .2em; overflow-wrap: anywhere; }
+    .field.static { color: var(--dim); }
+    .field.editable::after { content: "*"; color: var(--dim); }
+    .calculator-keys .row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding-left: .3em; }
+    .calculator-keys .row-number { display: none; }
+    .calculator-keys .field { border-color: var(--line); text-align: center; padding: .35em .2em; }
+    .calculator-readout .flow { justify-content: flex-end; font-size: 1.35em; }
+    .empty { padding: .65em; color: var(--dim); }
+    .bottom-line {
+      border-top: 1px solid var(--line);
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: .7em;
+      padding: .25em .5em;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .bottom-line .crumb { overflow: hidden; text-overflow: ellipsis; }
+    .key-help { margin-left: auto; color: var(--dim); }
+    .editor { width: 100%; display: flex; gap: .5em; align-items: center; }
+    .editor input { flex: 1; min-width: 0; color: var(--focus); background: transparent; border: 1px solid var(--focus); padding: .15em .35em; outline: 0; }
+    .system-page { min-width: 0; min-height: 0; border: 1px solid var(--line); padding: .7em; overflow: auto; }
+    .system-page-title { padding-bottom: .45em; border-bottom: 1px dotted var(--line); }
+    .choice-list { display: grid; gap: .5em; margin-top: 1em; }
+    .choice { border: 1px solid var(--line); padding: .45em; }
+
+    /* Shell controls occupy the left edge without a non-semantic outer frame. */
+    .nested-frame { grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; gap: .4em; }
+    .nested-frame.menu-hidden { grid-template-columns: minmax(0, 1fr); }
+    .nested-frame .surface { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+    .nested-frame .context-rail { border: 1px solid var(--line); padding: .4em; display: flex; flex-direction: column; gap: .35em; min-width: 8em; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+    .nested-frame .context-action { flex: 0 0 auto; text-align: left; }
+    .nested-frame .bottom-line { grid-column: 1 / -1; border: 1px solid var(--line); }
+    .bottom-line .choice { padding: .08em .4em; }
+
+    .device[data-profile="tiny"] .key-help,
+    .device[data-profile="tiny"] .mount-title,
+    .device[data-profile="tiny"] .app-title .muted { display: none; }
+    .device[data-profile="tiny"] .nested-frame { grid-template-columns: auto minmax(0, 1fr); }
+    .device[data-profile="tiny"] .nested-frame.menu-hidden { grid-template-columns: minmax(0, 1fr); }
+    .device[data-profile="tiny"] .nested-frame .context-rail { min-width: 5.5em; padding: .25em; }
+
+    #prototype-controls {
+      position: fixed;
+      z-index: 20;
+      left: 50%;
+      bottom: 10px;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: .45em;
+      max-width: calc(100vw - 20px);
+      color: #f6f6f0;
+      background: #313631;
+      border: 1px solid #e7ece5;
+      border-radius: 999px;
+      padding: 7px 10px;
+      box-shadow: 0 6px 24px #000b;
+      font: 12px/1.2 ui-monospace, monospace;
+    }
+    #prototype-controls select {
+      border: 1px solid #aeb6ae;
+      background: #171a17;
+      color: #fff;
+      padding: 4px 7px;
+      border-radius: 99px;
+    }
+    #state-readout { max-width: 32vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #c0c7c0; }
+    @media (max-width: 700px) { #state-readout { display: none; } }
+  </style>
+</head>
+<body>
+  <main id="prototype" aria-label="SilOS Shell UI prototype"></main>
+  <div id="prototype-controls" aria-label="Prototype controls">
+    <strong>Nested Frame</strong>
+    <label>Display
+      <select id="profile-select">
+        <option value="tiny">128×64</option>
+        <option value="sbc">480×320</option>
+        <option value="desktop">1024×768</option>
+        <option value="browser">Browser</option>
+      </select>
+    </label>
+    <span id="state-readout"></span>
+  </div>
+  <script>
+  (() => {
+    "use strict";
+
+    const shellActions = ["mode", "run", "settings", "power"];
+    const doubleEnterMilliseconds = 360;
+    let pendingAppEnter = null;
+    const apps = [
+      {
+        id: "todo", name: "To-do", running: true, dateFormat: "DD/MM/YYYY",
+        mounts: [
+          { id: "list", name: "Items", list: true, rows: [
+            { id: "1", fields: [
+              { id: "label", value: "TODO:", static: true },
+              { id: "desc", key: "todo.1.desc", value: "Learn how SilOS loads Lisp from a store", editable: true },
+              { id: "status", key: "todo.1.status", value: "to do", editable: true }
+            ]},
+            { id: "2", fields: [
+              { id: "label", value: "TODO:", static: true },
+              { id: "desc", key: "todo.2.desc", value: "Build the first live screen binding", editable: true },
+              { id: "status", key: "todo.2.status", value: "in progress", editable: true }
+            ]}
+          ]},
+          { id: "summary", name: "Summary", list: false, fields: [
+            { id: "label", value: "Count", static: true },
+            { id: "count", key: "todo.count", value: "2" }
+          ]}
+        ]
+      },
+      {
+        id: "status", name: "Status", running: true, dateFormat: "YYYY-MM-DD",
+        mounts: [{ id: "system", name: "System", list: false, fields: [
+          { id: "state", key: "system.state", value: "System ready" }
+        ]}]
+      },
+      {
+        id: "calculator", name: "Calculator", running: true, dateFormat: "DD/MM/YYYY",
+        accumulator: null, operation: null, awaitingOperand: false,
+        mounts: [
+          { id: "readout", name: "Read-out", className: "calculator-readout", list: false, fields: [
+            { id: "display", key: "calculator.display", value: "0" }
+          ]},
+          { id: "keypad", name: "Keys", className: "calculator-keys", list: true, rows: [
+            { id: "top", fields: ["7", "8", "9", "÷"].map((value, index) => ({ id: `key-${index}`, value, action: value })) },
+            { id: "upper", fields: ["4", "5", "6", "×"].map((value, index) => ({ id: `key-${index}`, value, action: value })) },
+            { id: "lower", fields: ["1", "2", "3", "−"].map((value, index) => ({ id: `key-${index}`, value, action: value })) },
+            { id: "bottom", fields: ["C", "0", "=", "+"].map((value, index) => ({ id: `key-${index}`, value, action: value })) }
+          ]}
+        ]
+      }
+    ];
+
+    const layoutColumns = [
+      { width: 1, tiles: [{ id: "todo", height: 1 }] },
+      { width: 1, tiles: [{ id: "status", height: 1 }] },
+      { width: 1, tiles: [{ id: "calculator", height: 1 }] }
+    ];
+
+    const params = new URLSearchParams(location.search);
+    const state = {
+      profile: ["tiny", "sbc", "desktop", "browser"].includes(params.get("profile")) ? params.get("profile") : "browser",
+      mode: "multi",
+      level: "shell",
+      focusId: "mode",
+      shellFocus: "mode",
+      currentApp: "todo",
+      invert: false,
+      autoHideMenu: false,
+      emptyTodos: false,
+      editReturn: null,
+      notice: "",
+      powerChoice: "no",
+      settingsChoice: "invert",
+      appMenuChoice: "move",
+      layoutOperation: "move"
+    };
+    if (state.profile === "tiny") state.mode = "single";
+
+    const root = document.querySelector("#prototype");
+    const profileSelect = document.querySelector("#profile-select");
+    const stateReadout = document.querySelector("#state-readout");
+
+    function runningApps() { return apps.filter(app => app.running); }
+    function appById(id) { return apps.find(app => app.id === id); }
+    function currentApp() { return appById(state.currentApp) || runningApps()[0] || apps[0]; }
+    function visibleApps() {
+      const running = runningApps();
+      if (state.mode === "single") return [currentApp()].filter(app => app.running);
+      return running;
+    }
+    function layoutLocation(appId) {
+      for (let columnIndex = 0; columnIndex < layoutColumns.length; columnIndex += 1) {
+        const rowIndex = layoutColumns[columnIndex].tiles.findIndex(tile => tile.id === appId);
+        if (rowIndex >= 0) return { columnIndex, rowIndex, column: layoutColumns[columnIndex], tile: layoutColumns[columnIndex].tiles[rowIndex] };
+      }
+      return null;
+    }
+    function supportsMulti() { return state.profile !== "tiny"; }
+    function esc(value) {
+      return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+    }
+    function focusClass(level, id) { return state.level === level && state.focusId === id ? " current" : ""; }
+    function appPath(appId) {
+      return state.currentApp === appId && ["template", "row", "field", "edit"].includes(state.level) ? " ancestor" : "";
+    }
+    function mountPath(appId, mountId) {
+      const token = `:${appId}:${mountId}`;
+      return state.focusId.includes(token) && ["row", "field", "edit"].includes(state.level) ? " ancestor" : "";
+    }
+    function updateUrl() {
+      const url = new URL(location.href);
+      url.searchParams.set("profile", state.profile);
+      history.replaceState(null, "", url);
+    }
+    function crumb() {
+      const names = ["SilOS"];
+      if (["app", "app-menu", "app-settings", "layout-adjust", "template", "row", "field", "edit"].includes(state.level)) names.push(currentApp().name);
+      if (state.level === "app-settings") names.push("Settings");
+      if (["template", "row", "field", "edit"].includes(state.level)) {
+        const parts = state.focusId.split(":");
+        const mount = currentApp().mounts.find(item => item.id === parts[2]);
+        if (mount) names.push(mount.name);
+      }
+      if (["row", "field", "edit"].includes(state.level)) names.push("Row " + (Number(state.focusId.split(":")[3]) + 1));
+      if (["field", "edit"].includes(state.level)) names.push(state.focusId.split(":").at(-1));
+      if (state.level === "shell") names.push(state.focusId.toUpperCase());
+      if (state.level === "manage-app") names.push("Run", appById(state.focusId)?.name || "");
+      if (state.level === "settings") names.push("Settings", state.settingsChoice);
+      if (state.level === "power") names.push("Power", state.powerChoice);
+      return names.join(" / ");
+    }
+    function stateSummary() {
+      const layout = layoutColumns.map(column => `${column.width.toFixed(1)}:[${column.tiles.map(tile => `${tile.id}@${tile.height.toFixed(1)}`).join("+")}]`).join(" | ");
+      return `profile=${state.profile} mode=${state.mode} level=${state.level} focus=${state.focusId} app=${state.currentApp} menu=${state.autoHideMenu ? "auto" : "always"} layout=${layout}`;
+    }
+    function renderActions() {
+      return shellActions.map(action => {
+        let label = action;
+        if (action === "mode") label = supportsMulti() ? `mode:${state.mode}` : "mode:single";
+        return `<button type="button" class="context-action${focusClass("shell", action)}" data-nav-level="shell" data-focus-id="${action}" data-action="${action}">${esc(label)}</button>`;
+      }).join("");
+    }
+    function effectiveRows(mount) { return state.emptyTodos && mount.id === "list" ? [] : mount.rows; }
+    function fieldHtml(field, id) {
+      const classes = `field${field.static ? " static" : ""}${field.editable ? " editable" : ""}${focusClass("field", id)}`;
+      const nav = field.static ? "" : ` data-nav-level="field" data-focus-id="${id}"`;
+      const binding = field.key ? ` data-bound-key="${esc(field.key)}"` : "";
+      return `<span class="${classes}"${nav}${binding}>${esc(field.value)}</span>`;
+    }
+    function mountHtml(app, mount) {
+      const mountId = `template:${app.id}:${mount.id}`;
+      let content = "";
+      if (mount.list) {
+        const rows = effectiveRows(mount);
+        content = rows.length ? rows.map((row, rowIndex) => {
+          const rowId = `row:${app.id}:${mount.id}:${rowIndex}`;
+          return `<div class="row${focusClass("row", rowId)}" data-nav-level="row" data-focus-id="${rowId}"><span class="row-number">${rowIndex + 1}</span>${row.fields.map(field => fieldHtml(field, `field:${app.id}:${mount.id}:${rowIndex}:${field.id}`)).join("")}</div>`;
+        }).join("") : `<div class="empty">No to-dos.</div>`;
+      } else {
+        content = `<div class="flow">${mount.fields.map(field => fieldHtml(field, `field:${app.id}:${mount.id}:-1:${field.id}`)).join("")}</div>`;
+      }
+      return `<section class="mount ${mount.className || ""}${focusClass("template", mountId)}${mountPath(app.id, mount.id)}" data-nav-level="template" data-focus-id="${mountId}"><div class="mount-title">${esc(mount.name)} · mounted template</div>${content}</section>`;
+    }
+    function appHtml(app) {
+      const id = `app:${app.id}`;
+      const appContext = ["app-menu", "layout-adjust"].includes(state.level) && state.currentApp === app.id ? " app-context" : "";
+      return `<section class="app-pane${focusClass("app", id)}${appPath(app.id)}${appContext}" data-nav-level="app" data-focus-id="${id}">
+        <header class="app-title">${esc(app.name)}</header>
+        <div class="mounts">${app.mounts.map(mount => mountHtml(app, mount)).join("")}</div>
+      </section>`;
+    }
+    function workspaceHtml() {
+      const shown = visibleApps();
+      if (!shown.length) return `<div class="workspace single"><div class="empty">NO RUNNING APPS · BACK TO SILOS</div></div>`;
+      if (state.mode === "single") return `<div class="workspace single">${appHtml(shown[0])}</div>`;
+      const columns = layoutColumns.map(column => ({
+        ...column,
+        tiles: column.tiles.filter(tile => appById(tile.id)?.running)
+      })).filter(column => column.tiles.length);
+      const columnTracks = columns.map(column => `minmax(0, ${column.width}fr)`).join(" ");
+      const html = columns.map(column => {
+        const rowTracks = column.tiles.length === 1
+          ? "minmax(0, 1fr)"
+          : column.tiles.map(tile => `minmax(0, ${tile.height}fr)`).join(" ");
+        return `<div class="layout-column" style="grid-template-rows:${rowTracks}">${column.tiles.map(tile => appHtml(appById(tile.id))).join("")}</div>`;
+      }).join("");
+      return `<div class="workspace" style="grid-template-columns:${columnTracks}">${html}</div>`;
+    }
+    function bottomLineHtml() {
+      if (state.level === "edit") {
+        const field = findField(state.focusId);
+        return `<footer class="bottom-line"><label class="editor"><span>EDIT</span><input id="data-entry" value="${esc(field?.value || "")}" data-bound-key="${esc(field?.key || "")}" autocomplete="off" spellcheck="false"><span>ENTER/BACK: DONE</span></label></footer>`;
+      }
+      if (state.level === "app-menu") {
+        return `<footer class="bottom-line"><span>${esc(currentApp().name)} APP MENU:</span><span class="choice${focusClass("app-menu", "move")}" data-nav-level="app-menu" data-focus-id="move">MOVE</span><span class="choice${focusClass("app-menu", "resize")}" data-nav-level="app-menu" data-focus-id="resize">RESIZE</span><span class="choice${focusClass("app-menu", "settings")}" data-nav-level="app-menu" data-focus-id="settings">SETTINGS</span><span class="key-help">←→ SELECT · ENTER IN · ESC APP</span></footer>`;
+      }
+      if (state.level === "layout-adjust") {
+        const help = state.layoutOperation === "move"
+          ? "↑↓ ORDER/CROSS COLUMN · ←→ CHANGE COLUMN · ENTER/ESC MENU"
+          : "←→ WIDTH · ↑↓ HEIGHT · ENTER/ESC MENU";
+        return `<footer class="bottom-line"><span>${esc(currentApp().name)} APP MENU:</span><strong>${state.layoutOperation.toUpperCase()}</strong><span class="key-help">${help}</span></footer>`;
+      }
+      return `<footer class="bottom-line"><span class="crumb">${esc(crumb())}${state.notice ? ` · ${esc(state.notice)}` : ""}</span><span class="key-help">←↑↓→ MOVE · ENTER IN · ESC BACK</span></footer>`;
+    }
+    function systemPageHtml() {
+      if (state.level === "app-settings") {
+        const app = currentApp();
+        return `<section class="system-page"><div class="system-page-title label">APP ${app.id.toUpperCase()} - SETTINGS</div><div class="choice-list"><div class="choice${focusClass("app-settings", "date-format")}" data-nav-level="app-settings" data-focus-id="date-format">DATE FORMAT · ${esc(app.dateFormat)} · ENTER TO CHANGE</div></div></section>`;
+      }
+      if (state.level === "manage-app") {
+        return `<section class="system-page"><div class="system-page-title label">START / STOP APPLICATION</div><div class="choice-list">${apps.map(app => `<div class="choice${focusClass("manage-app", app.id)}" data-nav-level="manage-app" data-focus-id="${app.id}">${app.running ? "[RUN]" : "[STOP]"} ${esc(app.name)} · ENTER TO TOGGLE</div>`).join("")}</div></section>`;
+      }
+      if (state.level === "settings") {
+        const choices = [
+          ["invert", `DISPLAY ${state.invert ? "LIGHT" : "DARK"}`],
+          ["auto-hide", `AUTO-HIDE SILOS MENU ${state.autoHideMenu ? "ON" : "OFF"}`],
+          ["empty", `TO-DO LIST ${state.emptyTodos ? "EMPTY" : "POPULATED"}`]
+        ];
+        return `<section class="system-page"><div class="system-page-title label">SILOS SETTINGS</div><div class="choice-list">${choices.map(([id, label]) => `<div class="choice${focusClass("settings", id)}" data-nav-level="settings" data-focus-id="${id}">${label}</div>`).join("")}</div></section>`;
+      }
+      if (state.level === "power") {
+        return `<section class="system-page"><div class="system-page-title label">SHUT DOWN SILOS?</div><div class="choice-list"><div class="choice${focusClass("power", "no")}" data-nav-level="power" data-focus-id="no">NO · RETURN TO SILOS</div><div class="choice${focusClass("power", "yes")}" data-nav-level="power" data-focus-id="yes">YES · SIMULATE SHUTDOWN</div></div></section>`;
+      }
+      return workspaceHtml();
+    }
+    function inAppMode() {
+      return ["app", "app-menu", "app-settings", "template", "row", "field", "edit", "layout-adjust"].includes(state.level);
+    }
+    function shellMenuVisible() {
+      if (state.profile === "tiny") return state.level === "shell";
+      return !state.autoHideMenu || !inAppMode();
+    }
+    function renderShell() {
+      const showMenu = shellMenuVisible();
+      return `<section class="device${state.invert ? " invert" : ""}" data-profile="${state.profile}"><div class="screen nested-frame${showMenu ? "" : " menu-hidden"}">
+        ${showMenu ? `<aside class="context-rail"><span class="label">SYSTEM</span>${renderActions()}</aside>` : ""}
+        <section class="surface">${systemPageHtml()}</section>
+        ${bottomLineHtml()}
+      </div></section>`;
+    }
+    function render() {
+      root.innerHTML = renderShell();
+      profileSelect.value = state.profile;
+      stateReadout.textContent = stateSummary();
+      root.querySelector(".current")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      if (state.level === "edit") {
+        const input = document.querySelector("#data-entry");
+        input?.focus();
+        input?.setSelectionRange(input.value.length, input.value.length);
+      }
+    }
+    function findField(id) {
+      const [, appId, mountId, rowIndexText, fieldId] = id.split(":");
+      const mount = appById(appId)?.mounts.find(item => item.id === mountId);
+      const fields = mount?.list ? effectiveRows(mount)[Number(rowIndexText)]?.fields : mount?.fields;
+      return fields?.find(field => field.id === fieldId);
+    }
+    function calculatorDisplay() {
+      return appById("calculator").mounts[0].fields[0];
+    }
+    function applyCalculatorOperation(left, operation, right) {
+      if (operation === "+") return left + right;
+      if (operation === "−") return left - right;
+      if (operation === "×") return left * right;
+      if (operation === "÷") return right === 0 ? NaN : left / right;
+      return right;
+    }
+    function pressCalculatorKey(key) {
+      const calculator = appById("calculator");
+      const display = calculatorDisplay();
+      if (/^\d$/.test(key)) {
+        display.value = calculator.awaitingOperand || display.value === "0" ? key : display.value + key;
+        calculator.awaitingOperand = false;
+      } else if (key === "C") {
+        display.value = "0";
+        calculator.accumulator = null;
+        calculator.operation = null;
+        calculator.awaitingOperand = false;
+      } else if (["+", "−", "×", "÷"].includes(key)) {
+        calculator.accumulator = Number(display.value);
+        calculator.operation = key;
+        calculator.awaitingOperand = true;
+      } else if (key === "=" && calculator.operation !== null) {
+        const result = applyCalculatorOperation(calculator.accumulator, calculator.operation, Number(display.value));
+        display.value = Number.isFinite(result) ? String(result) : "ERROR";
+        calculator.accumulator = null;
+        calculator.operation = null;
+        calculator.awaitingOperand = true;
+      }
+    }
+    function cancelPendingAppEnter() {
+      if (pendingAppEnter === null) return;
+      clearTimeout(pendingAppEnter.timer);
+      pendingAppEnter = null;
+    }
+    function enterFocusedApp(appId) {
+      const app = appById(appId);
+      if (!app || !app.running) return;
+      state.currentApp = app.id;
+      state.level = "template";
+      state.focusId = `template:${app.id}:${app.mounts[0].id}`;
+      state.notice = "";
+      render();
+    }
+    function focusAppLevel() {
+      const running = runningApps();
+      if (!running.length) {
+        state.notice = "No running apps; use RUN to start one";
+        return false;
+      }
+      if (!currentApp().running) state.currentApp = running[0].id;
+      state.level = "app";
+      state.focusId = `app:${state.currentApp}`;
+      state.notice = "";
+      return true;
+    }
+    function firstId(level) {
+      return root.querySelector(`[data-nav-level="${level}"]`)?.dataset.focusId || "";
+    }
+    function enter() {
+      state.notice = "";
+      if (state.level === "shell") {
+        state.shellFocus = state.focusId;
+        if (state.focusId === "mode") {
+          if (supportsMulti()) state.mode = state.mode === "single" ? "multi" : "single";
+          state.notice = supportsMulti() ? "Mode changed" : "Multi App unavailable at 128×64";
+        } else if (state.focusId === "run") {
+          state.level = "manage-app"; state.focusId = state.currentApp;
+        } else if (state.focusId === "settings") {
+          state.level = "settings"; state.focusId = state.settingsChoice;
+        } else if (state.focusId === "power") {
+          state.level = "power"; state.focusId = state.powerChoice;
+        }
+      } else if (state.level === "app") {
+        const appId = currentApp().id;
+        if (pendingAppEnter !== null && pendingAppEnter.appId === appId) {
+          cancelPendingAppEnter();
+          state.level = "app-menu";
+          state.focusId = state.appMenuChoice;
+        } else {
+          cancelPendingAppEnter();
+          state.notice = "ENTER AGAIN FOR APP MENU";
+          const timer = setTimeout(() => {
+            if (state.level === "app" && state.currentApp === appId) enterFocusedApp(appId);
+            pendingAppEnter = null;
+          }, doubleEnterMilliseconds);
+          pendingAppEnter = { appId, timer };
+        }
+      } else if (state.level === "template") {
+        const [, appId, mountId] = state.focusId.split(":");
+        const mount = appById(appId).mounts.find(item => item.id === mountId);
+        if (mount.list && effectiveRows(mount).length) {
+          state.level = "row"; state.focusId = `row:${appId}:${mountId}:0`;
+        } else {
+          const field = mount.fields?.find(item => !item.static);
+          if (field) { state.level = "field"; state.focusId = `field:${appId}:${mountId}:-1:${field.id}`; }
+        }
+      } else if (state.level === "row") {
+        const [, appId, mountId, rowIndex] = state.focusId.split(":");
+        const mount = appById(appId).mounts.find(item => item.id === mountId);
+        const field = effectiveRows(mount)[Number(rowIndex)].fields.find(item => !item.static);
+        if (field) { state.level = "field"; state.focusId = `field:${appId}:${mountId}:${rowIndex}:${field.id}`; }
+      } else if (state.level === "field") {
+        const field = findField(state.focusId);
+        if (field?.action) pressCalculatorKey(field.action);
+        else if (field?.editable) { state.editReturn = state.focusId; state.level = "edit"; }
+        else state.notice = "Read-only field";
+      } else if (state.level === "edit") {
+        state.level = "field";
+      } else if (state.level === "manage-app") {
+        const app = appById(state.focusId);
+        app.running = !app.running;
+        if (!currentApp().running) state.currentApp = runningApps()[0]?.id || app.id;
+      } else if (state.level === "settings") {
+        state.settingsChoice = state.focusId;
+        if (state.focusId === "invert") state.invert = !state.invert;
+        if (state.focusId === "auto-hide") state.autoHideMenu = !state.autoHideMenu;
+        if (state.focusId === "empty") state.emptyTodos = !state.emptyTodos;
+      } else if (state.level === "power") {
+        state.powerChoice = state.focusId;
+        state.notice = state.focusId === "yes" ? "Shutdown simulated; no state was persisted" : "Shutdown cancelled";
+        state.level = "shell"; state.focusId = "power";
+      } else if (state.level === "app-menu") {
+        state.appMenuChoice = state.focusId;
+        if (state.focusId === "settings") {
+          state.level = "app-settings";
+          state.focusId = "date-format";
+        } else if (state.mode === "multi" && runningApps().length > 1) {
+          state.layoutOperation = state.focusId;
+          state.level = "layout-adjust";
+        } else {
+          state.notice = "Move and Resize require two visible apps";
+        }
+      } else if (state.level === "app-settings") {
+        const formats = ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"];
+        const app = currentApp();
+        app.dateFormat = formats[(formats.indexOf(app.dateFormat) + 1) % formats.length];
+      } else if (state.level === "layout-adjust") {
+        state.level = "app-menu";
+        state.focusId = state.layoutOperation;
+      }
+      render();
+    }
+    function removeLayoutTile(location) {
+      const [tile] = location.column.tiles.splice(location.rowIndex, 1);
+      if (!location.column.tiles.length) layoutColumns.splice(layoutColumns.indexOf(location.column), 1);
+      return tile;
+    }
+    function moveLayoutApp(direction) {
+      const location = layoutLocation(state.currentApp);
+      if (!location) return;
+      const { columnIndex, rowIndex, column } = location;
+      if (direction === "up" && rowIndex > 0) {
+        [column.tiles[rowIndex - 1], column.tiles[rowIndex]] = [column.tiles[rowIndex], column.tiles[rowIndex - 1]];
+        return;
+      }
+      if (direction === "down" && rowIndex < column.tiles.length - 1) {
+        [column.tiles[rowIndex], column.tiles[rowIndex + 1]] = [column.tiles[rowIndex + 1], column.tiles[rowIndex]];
+        return;
+      }
+
+      const adjacentIndex = direction === "left" || direction === "up" ? columnIndex - 1 : columnIndex + 1;
+      const adjacent = layoutColumns[adjacentIndex];
+      if (adjacent) {
+        const tile = removeLayoutTile(location);
+        if (direction === "up") adjacent.tiles.unshift(tile);
+        else if (direction === "down") adjacent.tiles.push(tile);
+        else adjacent.tiles.splice(Math.min(rowIndex, adjacent.tiles.length), 0, tile);
+        return;
+      }
+
+      if (column.tiles.length === 1) {
+        state.notice = "Already at the outer layout edge";
+        return;
+      }
+      const tile = removeLayoutTile(location);
+      const newColumn = { width: 1, tiles: [tile] };
+      if (direction === "left" || direction === "up") layoutColumns.unshift(newColumn);
+      else layoutColumns.push(newColumn);
+    }
+    function resizeLayoutApp(direction) {
+      const location = layoutLocation(state.currentApp);
+      if (!location) return;
+      if (direction === "left" || direction === "right") {
+        const delta = direction === "left" ? -.2 : .2;
+        location.column.width = Math.max(.4, Math.min(3, location.column.width + delta));
+      } else {
+        const visibleTileCount = location.column.tiles.filter(tile => appById(tile.id)?.running).length;
+        if (visibleTileCount <= 1) return;
+        const delta = direction === "up" ? -.2 : .2;
+        location.tile.height = Math.max(.4, Math.min(3, location.tile.height + delta));
+      }
+    }
+    function navigateMultiApp(direction) {
+      const current = root.querySelector(`[data-nav-level="app"][data-focus-id="${CSS.escape(state.focusId)}"]`);
+      const currentColumn = current?.closest(".layout-column");
+      if (!current || !currentColumn) return;
+      const columns = [...root.querySelectorAll(".layout-column")];
+      const appsInColumn = [...currentColumn.querySelectorAll(":scope > .app-pane")];
+      let target = null;
+
+      if (direction === "up" || direction === "down") {
+        const rowIndex = appsInColumn.indexOf(current);
+        const targetIndex = rowIndex + (direction === "up" ? -1 : 1);
+        target = appsInColumn[targetIndex] || null;
+      } else {
+        const columnIndex = columns.indexOf(currentColumn);
+        const targetColumn = columns[columnIndex + (direction === "left" ? -1 : 1)];
+        if (targetColumn) {
+          const currentTop = current.getBoundingClientRect().top;
+          const targetApps = [...targetColumn.querySelectorAll(":scope > .app-pane")];
+          target = targetApps.filter(app => app.getBoundingClientRect().top <= currentTop + 1).at(-1) || targetApps[0] || null;
+        }
+      }
+
+      if (!target) return;
+      state.focusId = target.dataset.focusId;
+      state.currentApp = state.focusId.replace("app:", "");
+      render();
+    }
+    function back() {
+      cancelPendingAppEnter();
+      if (state.level === "shell") {
+        state.shellFocus = state.focusId;
+        focusAppLevel();
+        render();
+        return;
+      }
+      state.notice = "";
+      if (state.level === "edit") { state.level = "field"; state.focusId = state.editReturn; }
+      else if (state.level === "field") {
+        const [, appId, mountId, rowIndex] = state.focusId.split(":");
+        if (rowIndex === "-1") { state.level = "template"; state.focusId = `template:${appId}:${mountId}`; }
+        else { state.level = "row"; state.focusId = `row:${appId}:${mountId}:${rowIndex}`; }
+      } else if (state.level === "row") {
+        const [, appId, mountId] = state.focusId.split(":"); state.level = "template"; state.focusId = `template:${appId}:${mountId}`;
+      } else if (state.level === "template") {
+        state.level = "app"; state.focusId = `app:${state.currentApp}`;
+      } else if (state.level === "app") { state.level = "shell"; state.focusId = state.shellFocus; }
+      else if (state.level === "layout-adjust") { state.level = "app-menu"; state.focusId = state.layoutOperation; }
+      else if (state.level === "app-settings") { state.level = "app-menu"; state.focusId = "settings"; state.appMenuChoice = "settings"; }
+      else if (state.level === "app-menu") { state.level = "app"; state.focusId = `app:${state.currentApp}`; }
+      else {
+        const previous = state.level;
+        state.level = "shell";
+        state.focusId = previous === "settings" ? "settings" : previous === "power" ? "power" : previous === "manage-app" ? "run" : state.shellFocus;
+        state.shellFocus = state.focusId;
+      }
+      render();
+    }
+    function navigate(direction) {
+      state.notice = "";
+      cancelPendingAppEnter();
+      if (state.level === "layout-adjust") {
+        if (state.layoutOperation === "move") moveLayoutApp(direction);
+        else resizeLayoutApp(direction);
+        render(); return;
+      }
+      if (state.level === "app-menu") {
+        if (direction === "left" || direction === "right") {
+          const choices = ["move", "resize", "settings"];
+          const step = direction === "left" ? -1 : 1;
+          state.appMenuChoice = choices[(choices.indexOf(state.appMenuChoice) + step + choices.length) % choices.length];
+          state.focusId = state.appMenuChoice;
+          render();
+        }
+        return;
+      }
+      if (state.level === "app" && state.mode === "single") {
+        const list = runningApps();
+        if (list.length) {
+          const index = list.findIndex(app => app.id === state.currentApp);
+          const step = direction === "left" || direction === "up" ? -1 : 1;
+          state.currentApp = list[(index + step + list.length) % list.length].id;
+          state.focusId = `app:${state.currentApp}`;
+        }
+        render(); return;
+      }
+      if (state.level === "app" && state.mode === "multi") {
+        navigateMultiApp(direction);
+        return;
+      }
+      const current = root.querySelector(`[data-nav-level="${state.level}"][data-focus-id="${CSS.escape(state.focusId)}"]`);
+      const currentParts = state.focusId.split(":");
+      const sameContext = node => {
+        const parts = node.dataset.focusId.split(":");
+        if (state.level === "template") return parts[1] === currentParts[1];
+        if (state.level === "row") return parts[1] === currentParts[1] && parts[2] === currentParts[2];
+        if (state.level === "field") return parts[1] === currentParts[1] && parts[2] === currentParts[2] && parts[3] === currentParts[3];
+        return true;
+      };
+      const candidates = [...root.querySelectorAll(`[data-nav-level="${state.level}"]`)].filter(node => node !== current && node.offsetParent !== null && sameContext(node));
+      if (!current || !candidates.length) return;
+      const box = current.getBoundingClientRect();
+      const origin = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      const scored = candidates.map(node => {
+        const rect = node.getBoundingClientRect();
+        const dx = rect.left + rect.width / 2 - origin.x;
+        const dy = rect.top + rect.height / 2 - origin.y;
+        const valid = direction === "left" ? dx < -1 : direction === "right" ? dx > 1 : direction === "up" ? dy < -1 : dy > 1;
+        const primary = direction === "left" || direction === "right" ? Math.abs(dx) : Math.abs(dy);
+        const cross = direction === "left" || direction === "right" ? Math.abs(dy) : Math.abs(dx);
+        return { node, valid, score: primary * 1000 + cross };
+      }).filter(item => item.valid).sort((a, b) => a.score - b.score);
+      if (scored[0]) {
+        state.focusId = scored[0].node.dataset.focusId;
+        if (["app", "manage-app"].includes(state.level)) state.currentApp = state.focusId.replace("app:", "");
+        if (["template", "row", "field"].includes(state.level)) state.currentApp = state.focusId.split(":")[1];
+        if (state.level === "settings") state.settingsChoice = state.focusId;
+        if (state.level === "power") state.powerChoice = state.focusId;
+        if (state.level === "app-menu") state.appMenuChoice = state.focusId;
+        if (state.level === "shell") state.shellFocus = state.focusId;
+        render();
+      }
+    }
+    document.addEventListener("click", event => {
+      const action = event.target.closest("[data-action]");
+      if (action) { state.level = "shell"; state.focusId = action.dataset.action; state.shellFocus = state.focusId; enter(); return; }
+      const nav = event.target.closest("[data-nav-level][data-focus-id]");
+      if (nav) {
+        state.level = nav.dataset.navLevel;
+        state.focusId = nav.dataset.focusId;
+        if (["app", "manage-app"].includes(state.level)) state.currentApp = state.focusId.replace("app:", "");
+        if (["template", "row", "field"].includes(state.level)) state.currentApp = state.focusId.split(":")[1];
+        render();
+      }
+    });
+    profileSelect.addEventListener("change", () => {
+      state.profile = profileSelect.value;
+      if (!supportsMulti()) state.mode = "single";
+      updateUrl(); render();
+    });
+    document.addEventListener("input", event => {
+      if (event.target.id !== "data-entry") return;
+      const field = findField(state.editReturn);
+      if (!field) return;
+      field.value = event.target.value;
+      document.querySelectorAll(`[data-bound-key="${CSS.escape(field.key)}"]`).forEach(node => { if (node !== event.target) node.textContent = field.value; });
+      stateReadout.textContent = stateSummary() + ` value=${JSON.stringify(field.value)}`;
+    });
+    document.addEventListener("keydown", event => {
+      const inEditor = event.target.id === "data-entry";
+      if (event.target.matches?.("select")) return;
+      if (inEditor) {
+        if (event.key === "Enter" || event.key === "Escape") { event.preventDefault(); event.key === "Enter" ? enter() : back(); }
+        return;
+      }
+      if (event.repeat && event.key === "Enter") return;
+      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+        event.preventDefault(); navigate(event.key.replace("Arrow", "").toLowerCase()); return;
+      }
+      if (event.key === "Enter") { event.preventDefault(); enter(); return; }
+      if (event.key === "Escape" || event.key === "Backspace") { event.preventDefault(); back(); }
+    });
+
+    render();
+  })();
+  </script>
+</body>
+</html>
