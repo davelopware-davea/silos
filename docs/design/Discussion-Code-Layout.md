@@ -18,6 +18,9 @@ architecture and promoted it to [`src/`](../../src/). Their adapters follow
 the same ownership rules as any other dependency adapter. Reconsidering either
 dependency requires an explicit project-level decision in the
 [SilOS plan](SilOS_PLAN.md); it is no longer an open question in this note.
+The active [Shell UI implementation plan](ImplementationPlan-ShellUI.md)
+applies these ownership rules to Shell interaction, relative layout, template
+population, and platform display.
 
 ## Module ownership
 

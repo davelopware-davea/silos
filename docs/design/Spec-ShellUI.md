@@ -7,7 +7,9 @@ This document defines the Shell UI behavior to implement across SilOS targets.
 It is the source of truth for Shell hierarchy, screen regions, focus,
 navigation, app layout, menus, and data entry. Project scope and milestone
 priority remain governed by [SilOS_PLAN.md](SilOS_PLAN.md). Public uLisp UI
-interfaces remain governed by the applicable API specifications.
+interfaces remain governed by the applicable API specifications. Class
+ownership, platform seams, and delivery order are defined by the active
+[Shell UI implementation plan](ImplementationPlan-ShellUI.md).
 
 Normative terms **must**, **should**, and **may** describe required, preferred,
 and optional behavior respectively.

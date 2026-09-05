@@ -12,7 +12,8 @@ Project-level code ownership and platform boundaries are recorded in the
 [SilOS code-layout discussion](Discussion-Code-Layout.md). Supporting design
 material is kept separate: [UiRefs and templates](Discussion-VariableBindingAndTemplates.md),
 the adopted [Shell UI specification](Spec-ShellUI.md), supporting
-[Shell UI discussion](Discussion-Shell-UI.md), and
+[Shell UI discussion](Discussion-Shell-UI.md), the active
+[Shell UI implementation plan](ImplementationPlan-ShellUI.md), and
 [storage and MQTT references](Discussion-QueueMetaphors.md). The implemented
 [zero-copy UI refactor](RefactorPlan-UI-Rendering-Pipeline.md) records its
 supporting implementation plan. The Store class and task refactor is recorded
@@ -25,7 +26,7 @@ Browser-substrate evidence.
 1. [Purpose](#1-purpose)
 2. [Governing principles](#2-governing-principles)
 3. [Committed foundations](#3-committed-foundations)
-4. [Current milestone: complete the to-do foundation](#4-current-milestone-complete-the-to-do-foundation)
+4. [Current milestone: implement the Browser Canvas Shell UI](#4-current-milestone-implement-the-browser-canvas-shell-ui)
 5. [Questions to answer during this milestone](#5-questions-to-answer-during-this-milestone)
 6. [Later milestones](#6-later-milestones)
 7. [Topics deliberately deferred](#7-topics-deliberately-deferred)
@@ -107,7 +108,11 @@ promoted to [`src/`](../../src/). The following general approach is locked:
   portable UI deliberately uses allocation-free uLisp navigation helpers
   because uLisp objects are its canonical in-memory representation;
 - Shell interaction, focus, screen composition, and Single App/Multi App layout
-  follow the adopted [Shell UI specification](Spec-ShellUI.md); and
+  follow the adopted [Shell UI specification](Spec-ShellUI.md);
+- Input/Output is a top-level capability alongside Shell, UI, Store, and
+  Runtime. Its future design will support bidirectional variable binding and
+  configurable routing of bounded semantic events to either Shell or apps;
+  the active Shell UI milestone defines only the semantic input seam; and
 - the Browser target uses Emscripten WebAssembly, cooperative fibers, preloaded startup stores, and a narrow Browser surface adapter.
 
 Public operations, record representations, capacities, rendering strategy, and
@@ -177,43 +182,47 @@ Applications operate for the current user, who may be an implicit local user or 
 
 SilOS source code is licensed under the MIT License. Licences for fonts, artwork, documentation, examples, and third-party components remain undecided.
 
-## 4. Current milestone: complete the to-do foundation
+## 4. Current milestone: implement the Browser Canvas Shell UI
 
-Continue from the promoted implementation in [`src/`](../../src/) and complete
-the first end-to-end SilOS application. The Browser baseline already proves
-real uLisp loading, bounded FreeRTOS task communication, pending-to-ready
-StoreRefs, watches, UiRefs, flow templates, Shell lifecycle events, and Browser
-surface rendering from substantially portable modules.
+Implement the adopted [Shell UI specification](Spec-ShellUI.md) in `src/`
+using the class-based architecture and sequence in the
+[Shell UI implementation plan](ImplementationPlan-ShellUI.md). The Browser is
+the first target, but its display adapter must draw through a deliberately
+small Canvas vocabulary rather than use HTML elements for Shell layout. This
+keeps the physical rendering model close to constrained display targets.
 
-This milestone is complete when the same foundation:
+This milestone is complete when:
 
-1. accepts semantic input to create, edit, change status, and delete to-do items;
-2. automatically reflects those mutations through the live Ref/template path;
-3. persists items across restart with defined interruption behaviour;
-4. runs on Browser and ESP32 from substantially shared application and runtime code; and
-5. reports flash/code size, peak RAM use, startup time, and input-to-display latency.
+1. portable modules own semantic interaction, hierarchy, focus, relative
+   layout, and navigation for the full specification;
+2. the Browser Canvas adapter renders the Nested Frame Shell, replacement
+   pages, Single App and Multi App layouts, app menus, movement, resizing, and
+   data entry without pop-over windows or DOM-based layout;
+3. bounded semantic input drives both Shell interaction and app-directed events
+   without exposing physical input details to portable modules;
+4. the existing zero-copy uLisp template/value path and task-ownership rules
+   remain intact; and
+5. conformance tests pass and frame time, input-to-display latency, stack use,
+   and steady-state heap use are recorded.
 
-The immediate next step is to decide the uLisp row-record representation and
-validation for `store-row-add`, then implement create, edit, delete, and
-persistence in small verified increments. Polish, networking, authentication,
-sound, multiple active applications, and later reference applications remain
-outside this milestone.
-
-The completed Browser prototype and FreeWisp spike remain historical evidence;
-their experiment plans no longer direct production work. Development and new
-tests belong in `src/`.
+ESP32 display and physical I/O integration are deliberately the next
+cross-platform validation, not a completion condition for this Browser
+milestone. The completed Browser prototype remains behavioural evidence; its
+experiment code is not the production implementation.
 
 ## 5. Questions to answer during this milestone
 
 These are the only active design questions. They refine the adopted approach;
 they do not reopen its foundations.
 
-1. What uLisp record representation and validation rules should Store CRUD use?
-2. How are UiRefs, StoreRefs, watches, templates, and app-owned allocations released safely on reload or failure?
-3. Which remaining fixed capacities and error behaviour are sufficient for editable to-do data and semantic input?
-4. What minimal persistence interface, representation, and interruption guarantees work on Browser and ESP32?
-5. Which remaining display, input, timing, and storage seams are needed to keep the Browser and MCU implementations substantially shared?
-6. What resource measurements and limits demonstrate viability on the reference MCU?
+1. Which bounded semantic input representation covers navigation and editing
+   without leaking Browser or future GPIO concepts into portable Shell code?
+2. Which relative display capabilities are sufficient for common layout while
+   leaving pixel geometry, fonts, clipping, and drawing to each target?
+3. Which UI declaration or field metadata additions are required for editable
+   values and actions?
+4. What measured frame cadence and resource use are acceptable for the Browser
+   implementation and plausible for the reference MCU?
 
 Record answers here only when evidence supports a project-level decision.
 Record implementation detail in source documentation rather than expanding
@@ -223,12 +232,14 @@ this plan.
 
 Plan each milestone only when the preceding prototype supplies enough evidence.
 
-1. Refine the to-do application and interaction model.
-2. Add alarm and shared time/notification services.
-3. Add calendar and structured date-based UI.
-4. Add chat and the minimum networking service it requires.
-5. Validate and refine the SBC and x86 targets.
-6. Consider additional capabilities only against concrete use cases.
+1. Complete the to-do CRUD and persistence foundation and validate the shared
+   Shell UI architecture on ESP32.
+2. Refine the to-do application and interaction model.
+3. Add alarm and shared time/notification services.
+4. Add calendar and structured date-based UI.
+5. Add chat and the minimum networking service it requires.
+6. Validate and refine the SBC and x86 targets.
+7. Consider additional capabilities only against concrete use cases.
 
 ## 7. Topics deliberately deferred
 
@@ -246,7 +257,9 @@ The following areas matter, but do not need detailed recommendations yet:
 - build system, dependency policy, ABI stability, and release governance;
 - browser simulation features beyond those required to test the active milestone;
 - bare-metal ownership of SBC or x86 hardware; and
-- sound, GPIO, sensors, remote rendering, and other optional capabilities.
+- detailed Input/Output design beyond the adopted top-level direction,
+  including GPIO discovery, output scheduling, and sensors;
+- sound, remote rendering, and other optional capabilities.
 
 When one of these becomes necessary, begin with the concrete use case and constraints, consult [SilOS_DESIGN_BACKLOG.md](SilOS_DESIGN_BACKLOG.md) for earlier thinking, and then decide afresh.
 
